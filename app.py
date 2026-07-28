@@ -285,3 +285,24 @@ else:
                 st.dataframe(tests_df, use_container_width=True)
         else:
             st.info("No data available to generate reports.")
+            import qrcode
+from io import BytesIO
+
+# --- QR CODE GENERATOR WIDGET ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📱 Mobile Quick Access (QR)")
+app_url = st.sidebar.text_input("Enter App Link:", "https://production-system.streamlit.app") # Oyage actual link eka hriyata danna
+
+if app_url:
+    # Generate QR code
+    qr = qrcode.QRCode(version=1, box_size=10, border=2)
+    qr.add_data(app_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Save to buffer to display in Streamlit
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    byte_im = buf.getvalue()
+    
+    st.sidebar.image(byte_im, caption="Scan to open on Phone", width=200)
