@@ -136,15 +136,15 @@ else:
 
     choice = st.session_state['menu_choice']
 
-    # --- 2. ORDER & MONTHLY PLAN MANAGEMENT ---
+    # --- 2. ORDER & MONTHLY PLAN MANAGEMENT (WITH EXCEL UPLOAD) ---
     if choice == "Order Management":
         st.header("📦 Monthly Order & Plan Management")
         
         if role in ["Admin", "Supervisor"]:
-            tab1, tab2 = st.tabs(["➕ Add Monthly Plan / Order", "➕ Add Extra Single Order"])
+            tab1, tab2, tab3 = st.tabs(["➕ Add Single Order", "📂 Upload Orders via Excel", "➕ Add Extra Single Order"])
             
             with tab1:
-                st.info("මාසික සැලසුම් (Monthly Plans) සහ ඇණවුම් ඇතුළත් කිරීම (මාසයෙන් මාසයට වෙන වෙනම ගබඩා වේ).")
+                st.info("තනි ඇණවුමක් (Single Order) එකින් එක ඇතුළත් කිරීම.")
                 with st.form("monthly_plan_form"):
                     col1, col2 = st.columns(2)
                     with col1:
@@ -169,6 +169,58 @@ else:
                             st.warning("Please fill Order Name and Order No.")
             
             with tab2:
+                st.info("Excel ෆයිල් එකක් (Excel/CSV) Upload කර orders එකවර ඇතුළත් කරගන්න.")
+                st.markdown("""
+                **ප්‍රධාන නීති (Excel format instructions):**
+                - ඔබේ Excel Sheet එකේ පහත සඳහන් **Column Names** හරියටම තිබිය යුතුය:
+                  `Month`, `Order Name`, `Order No`, `Target Qty`
+                """)
+                
+                # Sample Download Button for Excel Template
+                sample_df = pd.DataFrame({
+                    'Month': ['January 2026', 'January 2026'],
+                    'Order Name': ['Customer A', 'Customer B'],
+                    'Order No': ['ORD-001', 'ORD-002'],
+                    'Target Qty': [500, 1200]
+                })
+                output_sample = io.BytesIO()
+                with pd.ExcelWriter(output_sample, engine='openpyxl') as writer:
+                    sample_df.to_excel(writer, index=False, sheet_name='Template')
+                st.download_button(
+                    label="📥 Download Sample Excel Template",
+                    data=output_sample.getvalue(),
+                    file_name="Order_Upload_Template.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                
+                uploaded_file = st.file_uploader("Upload Excel / CSV File", type=["xlsx", "xls", "csv"])
+                if uploaded_file is not None:
+                    try:
+                        if uploaded_file.name.endswith('.csv'):
+                            up_df = pd.read_csv(uploaded_file)
+                        else:
+                            up_df = pd.read_excel(uploaded_file)
+                        
+                        st.write("Uploaded Data Preview:", up_df.head())
+                        
+                        if st.button("🚀 Process & Save Uploaded Orders"):
+                            required_cols = ['Month', 'Order Name', 'Order No', 'Target Qty']
+                            if all(col in up_df.columns for col in required_cols):
+                                # Clean data types
+                                up_df['Month'] = up_df['Month'].astype(str)
+                                up_df['Order Name'] = up_df['Order Name'].astype(str)
+                                up_df['Order No'] = up_df['Order No'].astype(str)
+                                up_df['Target Qty'] = up_df['Target Qty'].astype(int)
+                                
+                                st.session_state['orders'] = pd.concat([st.session_state['orders'], up_df], ignore_index=True)
+                                st.success(f"Successfully imported {len(up_df)} orders from Excel!")
+                                st.rerun()
+                            else:
+                                st.error(f"Excel file columns mismatch! Required columns are: {required_cols}")
+                    except Exception as e:
+                        st.error(f"Error reading file: {e}")
+
+            with tab3:
                 st.info("හදිසි හෝ අමතර Orders (Extra Orders) වෙනම එකතු කරගැනීමට.")
                 with st.form("extra_order_form"):
                     col1, col2 = st.columns(2)
@@ -246,7 +298,7 @@ else:
                 submit_test = st.form_submit_button("Save Test Entry")
                 if submit_test:
                     if order_no_sel:
-                        pass_pairs = min(l_pass, r_pass)  # Good pairs changed to Pass Pairs
+                        pass_pairs = min(l_pass, r_pass)  # Pass Pairs calculation
                         total_fail = l_fail + r_fail
                         logged_user = st.session_state['username']
                         
