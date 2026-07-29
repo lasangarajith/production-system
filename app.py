@@ -223,8 +223,6 @@ else:
             with tab3:
                 if role == "Admin":
                     st.info("Admin Facility: Edit or Update existing orders.")
-                    
-                    # Orders DataFrame එකට නිවැරදිව ID එක ලබා ගැනීම
                     cursor = conn.cursor()
                     cursor.execute("SELECT rowid, month, order_name, order_no, product_code, target_qty FROM orders")
                     rows = cursor.fetchall()
@@ -248,10 +246,6 @@ else:
                                 conn.commit()
                                 st.success("Order updated successfully!")
                                 st.rerun()
-                    else:
-                        st.info("No orders found to edit.")
-                else:
-                    st.warning("Order editing is restricted to Admin users only.")
                     else:
                         st.info("No orders found to edit.")
                 else:
