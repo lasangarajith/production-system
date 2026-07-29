@@ -70,7 +70,6 @@ if 'logged_in' not in st.session_state:
 # Helper Function to Determine Glove Class based on Product Code numbers
 def get_glove_class(prod_code):
     code_str = str(prod_code)
-    # Check numbers inside product code
     for num in ['075', '110']:
         if num in code_str: return 'Class 00'
     for num in ['102', '160']:
@@ -138,7 +137,7 @@ else:
     choice = st.session_state['menu_choice']
     months_list = ["January 2026", "February 2026", "March 2026", "April 2026", "May 2026", "June 2026", "July 2026", "August 2026", "September 2026", "October 2026", "November 2026", "December 2026"]
 
-    # --- 2. ORDER & MONTHLY PLAN MANAGEMENT (WITH ADMIN EDIT) ---
+    # --- 2. ORDER & MONTHLY PLAN MANAGEMENT ---
     if choice == "Order Management":
         st.header("📦 Monthly Order & Plan Management")
         
@@ -230,7 +229,7 @@ else:
         else:
             st.info("No orders found.")
 
-    # --- 3. TEST ENTRY (WITH SINGLE HAND / 0.5 CALCULATION) ---
+    # --- 3. TEST ENTRY ---
     elif choice == "Test Entry":
         st.header("🧪 Electric Glove Proof Testing Entry")
         
@@ -250,7 +249,6 @@ else:
                         filtered_codes = month_orders[month_orders['Order No'] == order_no_sel]['Product Code'].unique()
                         prod_code_sel = st.selectbox("Select Product Code", filtered_codes)
                         
-                        # Display detected Class
                         detected_class = get_glove_class(prod_code_sel)
                         st.info(f"Detected Glove Class: **{detected_class}**")
                     else:
@@ -267,7 +265,6 @@ else:
                 
                 if st.form_submit_button("Save Test Entry"):
                     if order_no_sel and prod_code_sel:
-                        # Calculation for Pass Pairs supporting single hands (.5 calculation)
                         full_pairs = min(l_pass, r_pass)
                         rem_left = l_pass - full_pairs
                         rem_right = r_pass - full_pairs
@@ -333,7 +330,7 @@ else:
         if not tests_df.empty:
             st.bar_chart(tests_df.groupby('Month')[['Pass Pairs', 'Total Fail']].sum())
 
-    # --- 6. REPORTS & PROGRESS (CLASS-WISE & REMAINING BASED ON PASS QTY) ---
+    # --- 6. REPORTS & PROGRESS ---
     elif choice == "Reports":
         st.header("📈 Monthly Reports & Class-wise Breakdown")
         
@@ -345,6 +342,7 @@ else:
             m_orders = orders_df[orders_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
             m_tests = tests_df[tests_df['Month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
+            # --- 1. Order Progress Table ---
             st.subheader("🗓️ Order Progress (Remaining calculated from Pass Qty)")
             summary_list = []
             if not m_orders.empty:
@@ -355,7 +353,7 @@ else:
                     passed_qty = float(ord_tests['Pass Pairs'].sum()) if not ord_tests.empty else 0.0
                     failed_qty = int(ord_tests['Total Fail'].sum()) if not ord_tests.empty else 0
                     tested_total = passed_qty + failed_qty
-                    remaining_qty = max(0.0, target - passed_qty)  # Remaining based on Pass Qty
+                    remaining_qty = max(0.0, target - passed_qty)
                     
                     summary_list.append({
                         'Order No': ord_no, 'Product Code': prod_code, 'Glove Class': get_glove_class(prod_code),
@@ -366,37 +364,64 @@ else:
             if summary_list:
                 summary_df = pd.DataFrame(summary_list)
                 st.dataframe(summary_df, use_container_width=True)
+            
+            # --- 2. Class-wise Testing Summary (With Date Filter & Daily Qty) ---
+            st.subheader("🛡️ Class-wise Testing Summary (Daily & Total)")
+            if not m_tests.empty:
+                # Add Glove Class column to test records
+                m_tests['Glove Class'] = m_tests['Product Code'].apply(get_glove_class)
                 
-                # Class-wise Summary Table
-                st.subheader("🛡️ Class-wise Testing Summary")
-                if not summary_df.empty:
-                    class_summary = summary_df.groupby('Glove Class').agg({
-                        'Target Qty': 'sum',
-                        'Pass Qty': 'sum',
-                        'Fail Qty': 'sum',
-                        'Tested Total': 'sum'
-                    }).reset_index()
-                    
-                    # Calculate Fail %
-                    class_summary['Fail %'] = class_summary.apply(lambda r: round((r['Fail Qty'] / r['Tested Total'] * 100), 2) if r['Tested Total'] > 0 else 0.0, axis=1)
-                    st.dataframe(class_summary, use_container_width=True)
+                # Date Selection Filter
+                available_dates = sorted(m_tests['Date'].unique())
+                selected_date = st.selectbox("Select Date to View Daily Class Qty", available_dates)
                 
-                # Excel Download
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    summary_df.to_excel(writer, index=False, sheet_name='Order_Progress')
-                    if not class_summary.empty:
-                        class_summary.to_excel(writer, index=False, sheet_name='Class_Summary')
-                    if not m_tests.empty:
-                        m_tests.to_excel(writer, index=False, sheet_name='Test_History')
+                # Filter for selected date
+                daily_tests = m_tests[m_tests['Date'] == selected_date]
                 
-                st.download_button(
-                    label=f"📥 Download {report_month} Complete Report as Excel",
-                    data=output.getvalue(),
-                    file_name=f"Glove_Report_{report_month.replace(' ', '_')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                # Aggregate Daily Class Summary
+                daily_class_summary = daily_tests.groupby('Glove Class').agg({
+                    'Pass Pairs': 'sum',
+                    'Total Fail': 'sum'
+                }).reset_index()
+                daily_class_summary['Tested Total'] = daily_class_summary['Pass Pairs'] + daily_class_summary['Total Fail']
+                daily_class_summary['Fail %'] = daily_class_summary.apply(lambda r: round((r['Total Fail'] / r['Tested Total'] * 100), 2) if r['Tested Total'] > 0 else 0.0, axis=1)
+                
+                st.markdown(f"**📅 Date: {selected_date} - Class-wise Test Qty**")
+                st.dataframe(daily_class_summary, use_container_width=True)
+                
+                # Overall Monthly Class Summary (Without Target Qty)
+                st.markdown("**📊 Monthly Total Class-wise Summary**")
+                monthly_class_summary = m_tests.groupby('Glove Class').agg({
+                    'Pass Pairs': 'sum',
+                    'Total Fail': 'sum'
+                }).reset_index()
+                monthly_class_summary['Tested Total'] = monthly_class_summary['Pass Pairs'] + monthly_class_summary['Total Fail']
+                monthly_class_summary['Fail %'] = monthly_class_summary.apply(lambda r: round((r['Total Fail'] / r['Tested Total'] * 100), 2) if r['Tested Total'] > 0 else 0.0, axis=1)
+                st.dataframe(monthly_class_summary, use_container_width=True)
             else:
-                st.info("No orders found for this month.")
+                st.info("No test records found for this month.")
+
+            # --- 3. Test Records History (Original View) ---
+            st.subheader("📋 Complete Test Records History")
+            if not m_tests.empty:
+                st.dataframe(m_tests, use_container_width=True)
+            else:
+                st.info("No test history available.")
+                
+            # Excel Download Button
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                if summary_list:
+                    pd.DataFrame(summary_list).to_excel(writer, index=False, sheet_name='Order_Progress')
+                if not m_tests.empty:
+                    m_tests.groupby('Glove Class').agg({'Pass Pairs': 'sum', 'Total Fail': 'sum'}).reset_index().to_excel(writer, index=False, sheet_name='Class_Summary')
+                    m_tests.to_excel(writer, index=False, sheet_name='Test_History')
+            
+            st.download_button(
+                label=f"📥 Download {report_month} Complete Report as Excel",
+                data=output.getvalue(),
+                file_name=f"Glove_Report_{report_month.replace(' ', '_')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         else:
             st.info("No data available.")
