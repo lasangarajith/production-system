@@ -223,9 +223,16 @@ else:
             with tab3:
                 if role == "Admin":
                     st.info("Admin Facility: Edit or Update existing orders.")
-                    orders_df = pd.read_sql("SELECT rowid as id, * FROM orders", conn)
-                    if not orders_df.empty:
+                    
+                    # Orders DataFrame එකට නිවැරදිව ID එක ලබා ගැනීම
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT rowid, month, order_name, order_no, product_code, target_qty FROM orders")
+                    rows = cursor.fetchall()
+                    
+                    if rows:
+                        orders_df = pd.DataFrame(rows, columns=['id', 'month', 'order_name', 'order_no', 'product_code', 'target_qty'])
                         sel_ord_id = st.selectbox("Select Order ID to Edit", orders_df['id'].tolist())
+                        
                         curr_row = orders_df[orders_df['id'] == sel_ord_id].iloc[0]
                         
                         with st.form("edit_order_form"):
@@ -236,12 +243,15 @@ else:
                             e_target = st.number_input("Target Qty", min_value=1, value=int(curr_row['target_qty']))
                             
                             if st.form_submit_button("💾 Update Order"):
-                                cursor = conn.cursor()
                                 cursor.execute("UPDATE orders SET month=?, order_name=?, order_no=?, product_code=?, target_qty=? WHERE rowid=?",
                                                (e_month, e_name, e_no, e_code, e_target, sel_ord_id))
                                 conn.commit()
                                 st.success("Order updated successfully!")
                                 st.rerun()
+                    else:
+                        st.info("No orders found to edit.")
+                else:
+                    st.warning("Order editing is restricted to Admin users only.")
                     else:
                         st.info("No orders found to edit.")
                 else:
