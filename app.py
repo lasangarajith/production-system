@@ -59,7 +59,7 @@ if 'test_entries' not in st.session_state:
     st.session_state['test_entries'] = pd.DataFrame(columns=[
         'Date', 'Month', 'Order No', 'Product Code', 'Machine Number', 
         'Left Pass', 'Right Pass', 'Left Fail', 'Right Fail', 
-        'Pass Pairs', 'Total Fail', 'Logged User', 'Remarks'
+        'Tested Pairs', 'Pass Pairs', 'Total Fail', 'Logged User', 'Remarks'
     ])
 
 if 'logged_in' not in st.session_state:
@@ -265,6 +265,7 @@ else:
                 
                 if st.form_submit_button("Save Test Entry"):
                     if order_no_sel and prod_code_sel:
+                        tested_pairs = max(l_pass + l_fail, r_pass + r_fail)
                         full_pairs = min(l_pass, r_pass)
                         rem_left = l_pass - full_pairs
                         rem_right = r_pass - full_pairs
@@ -277,11 +278,11 @@ else:
                             'Order No': [order_no_sel], 'Product Code': [prod_code_sel],
                             'Machine Number': [machine_no], 'Left Pass': [l_pass], 'Right Pass': [r_pass],
                             'Left Fail': [l_fail], 'Right Fail': [r_fail],
-                            'Pass Pairs': [pass_pairs_val], 'Total Fail': [total_fail],
+                            'Tested Pairs': [tested_pairs], 'Pass Pairs': [pass_pairs_val], 'Total Fail': [total_fail],
                             'Logged User': [st.session_state['username']], 'Remarks': [remarks]
                         })
                         st.session_state['test_entries'] = pd.concat([st.session_state['test_entries'], new_test], ignore_index=True)
-                        st.success(f"Test saved! Calculated Pass Qty: {pass_pairs_val}")
+                        st.success(f"Test saved! Tested Pairs: {tested_pairs}, Pass Pairs: {pass_pairs_val}")
                     else:
                         st.error("Select valid Order and Product Code.")
 
@@ -342,26 +343,22 @@ else:
             m_orders = orders_df[orders_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
             m_tests = tests_df[tests_df['Month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
-            # --- 1. Order Progress Table (AGGREGATED & CORRECTED FOR MULTIPLE TEST ENTRIES) ---
+            # --- 1. Order Progress Table (DETAILED SEPARATE COLUMNS AS REQUESTED) ---
             st.subheader("🗓️ Order Progress")
             summary_list = []
             
             if not m_tests.empty:
-                # Group multiple test entries for the exact same Order No & Product Code together
                 grouped_tests = m_tests.groupby(['Order No', 'Product Code']).agg({
                     'Left Pass': 'sum',
                     'Right Pass': 'sum',
                     'Left Fail': 'sum',
-                    'Right Fail': 'sum',
-                    'Pass Pairs': 'sum',
-                    'Total Fail': 'sum'
+                    'Right Fail': 'sum'
                 }).reset_index()
                 
                 for _, t_row in grouped_tests.iterrows():
                     ord_no = t_row['Order No']
                     prod_code = t_row['Product Code']
                     
-                    # Fetch master order details if available
                     matched_order = m_orders[(m_orders['Order No'] == ord_no) & (m_orders['Product Code'] == prod_code)]
                     
                     if not matched_order.empty:
@@ -371,35 +368,39 @@ else:
                         order_name = "Unknown / Direct"
                         target = 0
                     
-                    l_p = t_row['Left Pass']
-                    r_p = t_row['Right Pass']
+                    lp = int(t_row['Left Pass'])
+                    rp = int(t_row['Right Pass'])
+                    lf = int(t_row['Left Fail'])
+                    rf = int(t_row['Right Fail'])
                     
-                    # Recorrect accurate pair calculation based on total accumulated passes
-                    full_pairs = min(l_p, r_p)
-                    rem_l = l_p - full_pairs
-                    rem_r = r_p - full_pairs
-                    passed_qty = full_pairs + (0.5 if (rem_l > 0 or rem_r > 0) else 0.0)
+                    # Accurate pair calculation based on accumulated left & right quantities
+                    tested_pairs = max(lp + lf, rp + rf)
+                    full_pairs = min(lp, rp)
+                    rem_l = lp - full_pairs
+                    rem_r = rp - full_pairs
+                    pass_pairs = full_pairs + (0.5 if (rem_l > 0 or rem_r > 0) else 0.0)
                     
-                    failed_qty = int(t_row['Total Fail'])
-                    total_tested = int(l_p + r_p + t_row['Left Fail'] + t_row['Right Fail'])
+                    fail_pairs = max(lf, rf) # Or total failed breakdowns
                     
-                    if total_tested == 0:
+                    if tested_pairs == 0:
                         continue
                         
-                    remaining_qty = max(0, target - passed_qty) if target > 0 else 0
+                    remaining_qty = max(0, target - pass_pairs) if target > 0 else 0
                     
                     summary_list.append({
                         'Order No': ord_no, 'Product Code': prod_code, 'Glove Class': get_glove_class(prod_code),
-                        'Order Name': order_name, 'Target Qty': target, 'Tested Total': total_tested,
-                        'Pass Qty': passed_qty, 'Fail Qty': failed_qty, 'Remaining Qty to Test': remaining_qty
+                        'Order Name': order_name, 'Target Qty': target, 
+                        'Tested Pairs': tested_pairs, 'Pass Pairs': pass_pairs, 
+                        'Pass Left Hand': lp, 'Pass Right Hand': rp, 
+                        'Fail Left Hand': lf, 'Fail Right Hand': rf, 
+                        'Remaining Qty to Test': remaining_qty
                     })
             
             if summary_list:
                 summary_df = pd.DataFrame(summary_list)
                 
-                # Function to highlight completed orders in light green
                 def highlight_completed(row_data):
-                    if row_data['Target Qty'] > 0 and row_data['Pass Qty'] >= row_data['Target Qty']:
+                    if row_data['Target Qty'] > 0 and row_data['Pass Pairs'] >= row_data['Target Qty']:
                         return ['background-color: #D4EDDA'] * len(row_data)
                     return [''] * len(row_data)
                 
