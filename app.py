@@ -342,30 +342,55 @@ else:
             m_orders = orders_df[orders_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
             m_tests = tests_df[tests_df['Month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
-            # --- 1. Order Progress Table (Only Tested Orders Included & Completed Highlighted) ---
+            # --- 1. Order Progress Table (AGGREGATED & CORRECTED FOR MULTIPLE TEST ENTRIES) ---
             st.subheader("🗓️ Order Progress")
             summary_list = []
-            if not m_orders.empty:
-                for idx, row in m_orders.iterrows():
-                    ord_no, prod_code, target = row['Order No'], row['Product Code'], int(row['Target Qty'])
-                    ord_tests = m_tests[(m_tests['Order No'] == ord_no) & (m_tests['Product Code'] == prod_code)] if not m_tests.empty else pd.DataFrame()
+            
+            if not m_tests.empty:
+                # Group multiple test entries for the exact same Order No & Product Code together
+                grouped_tests = m_tests.groupby(['Order No', 'Product Code']).agg({
+                    'Left Pass': 'sum',
+                    'Right Pass': 'sum',
+                    'Left Fail': 'sum',
+                    'Right Fail': 'sum',
+                    'Pass Pairs': 'sum',
+                    'Total Fail': 'sum'
+                }).reset_index()
+                
+                for _, t_row in grouped_tests.iterrows():
+                    ord_no = t_row['Order No']
+                    prod_code = t_row['Product Code']
                     
-                    # Skip orders that haven't been tested at all (Tested Total == 0)
-                    if ord_tests.empty:
-                        continue
-                        
-                    total_tested = int((ord_tests['Left Pass'] + ord_tests['Right Pass'] + ord_tests['Left Fail'] + ord_tests['Right Fail']).sum())
+                    # Fetch master order details if available
+                    matched_order = m_orders[(m_orders['Order No'] == ord_no) & (m_orders['Product Code'] == prod_code)]
+                    
+                    if not matched_order.empty:
+                        order_name = matched_order.iloc[0]['Order Name']
+                        target = int(matched_order.iloc[0]['Target Qty'])
+                    else:
+                        order_name = "Unknown / Direct"
+                        target = 0
+                    
+                    l_p = t_row['Left Pass']
+                    r_p = t_row['Right Pass']
+                    
+                    # Recorrect accurate pair calculation based on total accumulated passes
+                    full_pairs = min(l_p, r_p)
+                    rem_l = l_p - full_pairs
+                    rem_r = r_p - full_pairs
+                    passed_qty = full_pairs + (0.5 if (rem_l > 0 or rem_r > 0) else 0.0)
+                    
+                    failed_qty = int(t_row['Total Fail'])
+                    total_tested = int(l_p + r_p + t_row['Left Fail'] + t_row['Right Fail'])
                     
                     if total_tested == 0:
                         continue
                         
-                    passed_qty = int(ord_tests['Pass Pairs'].astype(float).sum())
-                    failed_qty = int(ord_tests['Total Fail'].sum())
-                    remaining_qty = max(0, target - passed_qty)
+                    remaining_qty = max(0, target - passed_qty) if target > 0 else 0
                     
                     summary_list.append({
                         'Order No': ord_no, 'Product Code': prod_code, 'Glove Class': get_glove_class(prod_code),
-                        'Order Name': row['Order Name'], 'Target Qty': target, 'Tested Total': total_tested,
+                        'Order Name': order_name, 'Target Qty': target, 'Tested Total': total_tested,
                         'Pass Qty': passed_qty, 'Fail Qty': failed_qty, 'Remaining Qty to Test': remaining_qty
                     })
             
@@ -374,7 +399,7 @@ else:
                 
                 # Function to highlight completed orders in light green
                 def highlight_completed(row_data):
-                    if row_data['Pass Qty'] >= row_data['Target Qty']:
+                    if row_data['Target Qty'] > 0 and row_data['Pass Qty'] >= row_data['Target Qty']:
                         return ['background-color: #D4EDDA'] * len(row_data)
                     return [''] * len(row_data)
                 
