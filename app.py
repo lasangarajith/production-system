@@ -61,12 +61,12 @@ if 'users' not in st.session_state:
 
 if 'orders' not in st.session_state:
     st.session_state['orders'] = pd.DataFrame(columns=[
-        'Month', 'Order Name', 'Order No', 'Target Qty'
+        'Month', 'Order Name', 'Order No', 'Product Code', 'Target Qty'
     ])
 
 if 'test_entries' not in st.session_state:
     st.session_state['test_entries'] = pd.DataFrame(columns=[
-        'Date', 'Month', 'Order No', 'Machine Number', 
+        'Date', 'Month', 'Order No', 'Product Code', 'Machine Number', 
         'Left Pass', 'Right Pass', 'Left Fail', 'Right Fail', 
         'Pass Pairs', 'Total Fail', 'Logged User', 'Remarks'
     ])
@@ -105,7 +105,7 @@ def login_screen():
 if not st.session_state['logged_in']:
     login_screen()
 else:
-    # Sidebar Navigation with Icons and Buttons (Replacing Dropdown)
+    # Sidebar Navigation with Icons and Buttons
     st.sidebar.title(f"👤 User: {st.session_state['username'].capitalize()}")
     st.sidebar.write(f"Role: **{st.session_state['role']}**")
     st.sidebar.markdown("---")
@@ -136,52 +136,53 @@ else:
 
     choice = st.session_state['menu_choice']
 
-    # --- 2. ORDER & MONTHLY PLAN MANAGEMENT (WITH EXCEL UPLOAD) ---
+    # --- 2. ORDER & MONTHLY PLAN MANAGEMENT ---
     if choice == "Order Management":
         st.header("📦 Monthly Order & Plan Management")
+        
+        months_list = ["January 2026", "February 2026", "March 2026", "April 2026", "May 2026", "June 2026", "July 2026", "August 2026", "September 2026", "October 2026", "November 2026", "December 2026"]
         
         if role in ["Admin", "Supervisor"]:
             tab1, tab2, tab3 = st.tabs(["➕ Add Single Order", "📂 Upload Orders via Excel", "➕ Add Extra Single Order"])
             
             with tab1:
-                st.info("තනි ඇණවුමක් (Single Order) එකින් එක ඇතුළත් කිරීම.")
+                st.info("තනි ඇණවුමක් (Single Order) සහ Product Code එක ඇතුළත් කිරීම.")
                 with st.form("monthly_plan_form"):
                     col1, col2 = st.columns(2)
                     with col1:
-                        selected_month = st.selectbox("Select Month & Year", ["January 2026", "February 2026", "March 2026", "April 2026", "May 2026", "June 2026", "July 2026", "August 2026", "September 2026", "October 2026", "November 2026", "December 2026"])
+                        selected_month = st.selectbox("Select Month & Year", months_list)
                         order_name = st.text_input("Order Name / Customer Name")
+                        product_code = st.text_input("Product Code (e.g. PRD-001)")
                     with col2:
-                        order_no = st.text_input("Order Number (Unique)")
+                        order_no = st.text_input("Order Number")
                         target_qty = st.number_input("Target Quantity (Glove Pairs)", min_value=1, value=100)
                     
                     submit_plan = st.form_submit_button("Save Monthly Order")
                     if submit_plan:
-                        if order_name and order_no:
+                        if order_name and order_no and product_code:
                             new_row = pd.DataFrame({
                                 'Month': [selected_month],
                                 'Order Name': [str(order_name)],
                                 'Order No': [str(order_no)],
+                                'Product Code': [str(product_code)],
                                 'Target Qty': [int(target_qty)]
                             })
                             st.session_state['orders'] = pd.concat([st.session_state['orders'], new_row], ignore_index=True)
                             st.success(f"Order for {selected_month} added successfully!")
                         else:
-                            st.warning("Please fill Order Name and Order No.")
+                            st.warning("Please fill Order Name, Order No and Product Code.")
             
             with tab2:
-                st.info("Excel ෆයිල් එකක් (Excel/CSV) Upload කර orders එකවර ඇතුළත් කරගන්න.")
-                st.markdown("""
-                **ප්‍රධාන නීති (Excel format instructions):**
-                - ඔබේ Excel Sheet එකේ පහත සඳහන් **Column Names** හරියටම තිබිය යුතුය:
-                  `Month`, `Order Name`, `Order No`, `Target Qty`
-                """)
+                st.info("System එකෙන් මාසය (Month) තෝරා, Excel ෆයිල් එක Upload කරන්න (Excel එකේ Month column එක අවශ්‍ය නැත).")
                 
-                # Sample Download Button for Excel Template
+                upload_month_choice = st.selectbox("Select Month for Uploaded Orders", months_list, key="up_month_sel")
+                
+                # Sample Download Button
                 sample_df = pd.DataFrame({
-                    'Month': ['January 2026', 'January 2026'],
-                    'Order Name': ['Customer A', 'Customer B'],
-                    'Order No': ['ORD-001', 'ORD-002'],
-                    'Target Qty': [500, 1200]
+                    'Order Name': ['Customer A', 'Customer A', 'Customer B'],
+                    'Order No': ['ORD-001', 'ORD-001', 'ORD-002'],
+                    'Product Code': ['PC-101', 'PC-102', 'PC-201'],
+                    'Target Qty': [500, 300, 1200]
                 })
                 output_sample = io.BytesIO()
                 with pd.ExcelWriter(output_sample, engine='openpyxl') as writer:
@@ -204,16 +205,20 @@ else:
                         st.write("Uploaded Data Preview:", up_df.head())
                         
                         if st.button("🚀 Process & Save Uploaded Orders"):
-                            required_cols = ['Month', 'Order Name', 'Order No', 'Target Qty']
+                            required_cols = ['Order Name', 'Order No', 'Product Code', 'Target Qty']
                             if all(col in up_df.columns for col in required_cols):
-                                # Clean data types
-                                up_df['Month'] = up_df['Month'].astype(str)
+                                # Assign selected month to all rows in uploaded file
+                                up_df['Month'] = upload_month_choice
                                 up_df['Order Name'] = up_df['Order Name'].astype(str)
                                 up_df['Order No'] = up_df['Order No'].astype(str)
+                                up_df['Product Code'] = up_df['Product Code'].astype(str)
                                 up_df['Target Qty'] = up_df['Target Qty'].astype(int)
                                 
+                                # Reorder columns
+                                up_df = up_df[['Month', 'Order Name', 'Order No', 'Product Code', 'Target Qty']]
+                                
                                 st.session_state['orders'] = pd.concat([st.session_state['orders'], up_df], ignore_index=True)
-                                st.success(f"Successfully imported {len(up_df)} orders from Excel!")
+                                st.success(f"Successfully imported {len(up_df)} orders for {upload_month_choice}!")
                                 st.rerun()
                             else:
                                 st.error(f"Excel file columns mismatch! Required columns are: {required_cols}")
@@ -221,23 +226,25 @@ else:
                         st.error(f"Error reading file: {e}")
 
             with tab3:
-                st.info("හදිසි හෝ අමතර Orders (Extra Orders) වෙනම එකතු කරගැනීමට.")
+                st.info("හදිසි හෝ අමතර Orders (Extra Orders) එකතු කරගැනීමට.")
                 with st.form("extra_order_form"):
                     col1, col2 = st.columns(2)
                     with col1:
-                        ex_month = st.selectbox("Select Month for Extra Order", ["January 2026", "February 2026", "March 2026", "April 2026", "May 2026", "June 2026", "July 2026", "August 2026", "September 2026", "October 2026", "November 2026", "December 2026"])
+                        ex_month = st.selectbox("Select Month for Extra Order", months_list, key="ex_m")
                         ex_cust = st.text_input("Extra Order Name / Client")
+                        ex_code = st.text_input("Product Code")
                     with col2:
                         ex_no = st.text_input("Extra Order Number")
                         ex_qty = st.number_input("Extra Quantity", min_value=1, value=50)
                     
                     submit_ex = st.form_submit_button("Add Extra Order")
                     if submit_ex:
-                        if ex_cust and ex_no:
+                        if ex_cust and ex_no and ex_code:
                             new_ex = pd.DataFrame({
                                 'Month': [ex_month],
                                 'Order Name': [str(ex_cust) + " (Extra)"],
                                 'Order No': [str(ex_no)],
+                                'Product Code': [str(ex_code)],
                                 'Target Qty': [int(ex_qty)]
                             })
                             st.session_state['orders'] = pd.concat([st.session_state['orders'], new_ex], ignore_index=True)
@@ -260,7 +267,7 @@ else:
         else:
             st.info("No orders or plans found yet.")
 
-    # --- 3. TEST ENTRY (MACHINE NUMBER & PASS PAIRS) ---
+    # --- 3. TEST ENTRY (WITH PRODUCT CODE DROPDOWN) ---
     elif choice == "Test Entry":
         st.header("🧪 Electric Glove Proof Testing Entry")
         
@@ -280,9 +287,15 @@ else:
                     if month_orders.empty:
                         st.warning("No orders found for this month.")
                         order_no_sel = ""
+                        prod_code_sel = ""
                     else:
                         order_no_sel = st.selectbox("Select Order No", month_orders['Order No'].unique())
-                        match_cust = month_orders[month_orders['Order No'] == order_no_sel]['Order Name'].values
+                        
+                        # Filter product codes based on selected order number
+                        filtered_codes = month_orders[month_orders['Order No'] == order_no_sel]['Product Code'].unique()
+                        prod_code_sel = st.selectbox("Select Product Code", filtered_codes)
+                        
+                        match_cust = month_orders[(month_orders['Order No'] == order_no_sel) & (month_orders['Product Code'] == prod_code_sel)]['Order Name'].values
                         cust_name = match_cust[0] if len(match_cust) > 0 else ""
                         st.write(f"Order Name: **{cust_name}**")
                     
@@ -297,8 +310,8 @@ else:
                 
                 submit_test = st.form_submit_button("Save Test Entry")
                 if submit_test:
-                    if order_no_sel:
-                        pass_pairs = min(l_pass, r_pass)  # Pass Pairs calculation
+                    if order_no_sel and prod_code_sel:
+                        pass_pairs = min(l_pass, r_pass)
                         total_fail = l_fail + r_fail
                         logged_user = st.session_state['username']
                         
@@ -306,6 +319,7 @@ else:
                             'Date': [str(test_date)],
                             'Month': [sel_test_month],
                             'Order No': [order_no_sel],
+                            'Product Code': [prod_code_sel],
                             'Machine Number': [machine_no],
                             'Left Pass': [l_pass],
                             'Right Pass': [r_pass],
@@ -319,7 +333,7 @@ else:
                         st.session_state['test_entries'] = pd.concat([st.session_state['test_entries'], new_test], ignore_index=True)
                         st.success(f"Test saved successfully! Pass Pairs calculated: {pass_pairs}")
                     else:
-                        st.error("Please select a valid Order No.")
+                        st.error("Please select a valid Order No and Product Code.")
 
         st.subheader("📋 Recent Glove Test Entries")
         if not st.session_state['test_entries'].empty:
@@ -385,7 +399,7 @@ else:
         else:
             st.info("Charts will appear once test entries are added.")
 
-    # --- 6. REPORTS & PROGRESS (MONTH-WISE TARGET VS TESTED VS REMAINING) ---
+    # --- 6. REPORTS & PROGRESS (GROUPED BY ORDER & PRODUCT CODE) ---
     elif choice == "Reports":
         st.header("📈 Monthly Reports & Progress Tracking")
         
@@ -399,26 +413,33 @@ else:
             report_month = st.selectbox("Select Month for Report", all_available_months)
             
             m_orders = orders_df[orders_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
-            m_tests = tests_df[tests_df['Month'] == report_month] if not tests_df.empty else pd.DataFrame()
+            m_tests = tests_df[tests_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
             
             summary_list = []
             if not m_orders.empty:
                 for idx, row in m_orders.iterrows():
                     ord_no = row['Order No']
+                    prod_code = row['Product Code']
                     ord_name = row['Order Name']
                     target = int(row['Target Qty'])
                     
-                    ord_tests = m_tests[m_tests['Order No'] == ord_no] if not m_tests.empty else pd.DataFrame()
+                    # Filter tests matching both Order No and Product Code
+                    if not m_tests.empty:
+                        ord_tests = m_tests[(m_tests['Order No'] == ord_no) & (m_tests['Product Code'] == prod_code)]
+                    else:
+                        ord_tests = pd.DataFrame()
+                    
                     tested_qty = int(ord_tests['Pass Pairs'].sum() + ord_tests['Total Fail'].sum()) if not ord_tests.empty else 0
-                    passed_qty = int(ord_tests['Pass Pairs'].sum()) if not ord_tests.empty else 0
+                    passed_pairs_qty = int(ord_tests['Pass Pairs'].sum()) if not ord_tests.empty else 0
                     remaining_qty = max(0, target - tested_qty)
                     
                     summary_list.append({
                         'Order No': ord_no,
+                        'Product Code': prod_code,
                         'Order Name': ord_name,
                         'Target Qty': target,
                         'Tested Qty': tested_qty,
-                        'Pass Pairs': passed_qty,
+                        'Pass Pairs': passed_pairs_qty,
                         'Remaining Qty to Test': remaining_qty
                     })
             
@@ -430,7 +451,7 @@ else:
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     summary_df.to_excel(writer, index=False, sheet_name='Monthly_Progress_Report')
                     if not m_tests.empty:
-                        m_tests.to_excel(writer, index=False, sheet_name='Detailed_Test_Logs')
+                        m_tests.to_excel(writer, index=False, sheet_name='Detailed_Test_History')
                 excel_data = output.getvalue()
                 
                 st.download_button(
@@ -442,7 +463,7 @@ else:
             else:
                 st.info("No orders found for the selected month.")
                 
-            st.subheader("📋 Detailed Test Log Entries (Machine Number & Logged User)")
+            st.subheader("📋 Detailed Test History Entries (All individual test records)")
             if not m_tests.empty:
                 st.dataframe(m_tests, use_container_width=True)
             else:
