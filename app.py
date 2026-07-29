@@ -9,23 +9,16 @@ st.set_page_config(page_title="Electric Glove Proof Testing System", layout="wid
 # --- CUSTOM CSS FOR BLUE, WHITE & LIGHT BLUE THEME & BACKGROUND ---
 st.markdown("""
     <style>
-    /* Main Background & Theme Styling */
     .stApp {
-        background-color: #F0F8FF; /* Alice Blue / Light Blue tint */
+        background-color: #F0F8FF;
     }
-    
-    /* Sidebar Styling */
     [data-testid="stSidebar"] {
         background-color: #E6F2FF;
         border-right: 2px solid #B0E0E6;
     }
-    
-    /* Headers Styling */
     h1, h2, h3 {
-        color: #003366 !important; /* Dark Blue */
+        color: #003366 !important;
     }
-    
-    /* Buttons Styling */
     .stButton>button {
         background-color: #0066CC;
         color: white;
@@ -37,8 +30,6 @@ st.markdown("""
         background-color: #004080;
         color: #ffffff;
     }
-    
-    /* Login Screen Background Styling */
     .login-container {
         background: linear-gradient(rgba(0, 51, 102, 0.7), rgba(0, 102, 204, 0.7)), 
                     url('https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1500&q=80');
@@ -51,7 +42,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Session State for Data Storage
+# Initialize Session State
 if 'users' not in st.session_state:
     st.session_state['users'] = {
         "admin": {"password": "123", "role": "Admin"},
@@ -76,7 +67,25 @@ if 'logged_in' not in st.session_state:
     st.session_state['username'] = ""
     st.session_state['role'] = ""
 
-# --- 1. LOGIN MODULE WITH BACKGROUND IMAGE CONTAINER ---
+# Helper Function to Determine Glove Class based on Product Code numbers
+def get_glove_class(prod_code):
+    code_str = str(prod_code)
+    # Check numbers inside product code
+    for num in ['075', '110']:
+        if num in code_str: return 'Class 00'
+    for num in ['102', '160']:
+        if num in code_str: return 'Class 0'
+    for num in ['152', '210']:
+        if num in code_str: return 'Class 1'
+    for num in ['229', '290']:
+        if num in code_str: return 'Class 2'
+    for num in ['292', '350']:
+        if num in code_str: return 'Class 3'
+    for num in ['356', '420']:
+        if num in code_str: return 'Class 4'
+    return 'Unclassified'
+
+# --- 1. LOGIN MODULE ---
 def login_screen():
     st.markdown('<div class="login-container">', unsafe_allow_html=True)
     st.title("⚡ Electric Glove Proof Testing System")
@@ -85,7 +94,7 @@ def login_screen():
     
     col1, col2 = st.columns(2)
     with col1:
-        username = st.text_input("Username (e.g. admin / supervisor / operator)")
+        username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         
         if st.button("🔐 Login to System"):
@@ -97,7 +106,6 @@ def login_screen():
                 st.rerun()
             else:
                 st.error("Invalid Username or Password!")
-    
     with col2:
         st.info("**Default Logins:**\n- Admin: `admin` / `123`\n- Supervisor: `supervisor` / `123`\n- Operator: `operator` / `123`")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -105,29 +113,22 @@ def login_screen():
 if not st.session_state['logged_in']:
     login_screen()
 else:
-    # Sidebar Navigation with Icons and Buttons
     st.sidebar.title(f"👤 User: {st.session_state['username'].capitalize()}")
     st.sidebar.write(f"Role: **{st.session_state['role']}**")
     st.sidebar.markdown("---")
     
     st.sidebar.subheader("📌 Navigation Menu")
-    
     if 'menu_choice' not in st.session_state:
         st.session_state['menu_choice'] = "Dashboard"
 
-    if st.sidebar.button("📊 Dashboard", use_container_width=True):
-        st.session_state['menu_choice'] = "Dashboard"
-    if st.sidebar.button("📦 Order & Plan Mgmt", use_container_width=True):
-        st.session_state['menu_choice'] = "Order Management"
-    if st.sidebar.button("🧪 Glove Test Entry", use_container_width=True):
-        st.session_state['menu_choice'] = "Test Entry"
-    if st.sidebar.button("📈 Reports & Progress", use_container_width=True):
-        st.session_state['menu_choice'] = "Reports"
+    if st.sidebar.button("📊 Dashboard", use_container_width=True): st.session_state['menu_choice'] = "Dashboard"
+    if st.sidebar.button("📦 Order & Plan Mgmt", use_container_width=True): st.session_state['menu_choice'] = "Order Management"
+    if st.sidebar.button("🧪 Glove Test Entry", use_container_width=True): st.session_state['menu_choice'] = "Test Entry"
+    if st.sidebar.button("📈 Reports & Progress", use_container_width=True): st.session_state['menu_choice'] = "Reports"
     
     role = st.session_state['role']
     if role == "Admin":
-        if st.sidebar.button("👥 User Management", use_container_width=True):
-            st.session_state['menu_choice'] = "User Management"
+        if st.sidebar.button("👥 User Management", use_container_width=True): st.session_state['menu_choice'] = "User Management"
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Logout", use_container_width=True):
@@ -135,165 +136,125 @@ else:
         st.rerun()
 
     choice = st.session_state['menu_choice']
+    months_list = ["January 2026", "February 2026", "March 2026", "April 2026", "May 2026", "June 2026", "July 2026", "August 2026", "September 2026", "October 2026", "November 2026", "December 2026"]
 
-    # --- 2. ORDER & MONTHLY PLAN MANAGEMENT ---
+    # --- 2. ORDER & MONTHLY PLAN MANAGEMENT (WITH ADMIN EDIT) ---
     if choice == "Order Management":
         st.header("📦 Monthly Order & Plan Management")
         
-        months_list = ["January 2026", "February 2026", "March 2026", "April 2026", "May 2026", "June 2026", "July 2026", "August 2026", "September 2026", "October 2026", "November 2026", "December 2026"]
-        
         if role in ["Admin", "Supervisor"]:
-            tab1, tab2, tab3 = st.tabs(["➕ Add Single Order", "📂 Upload Orders via Excel", "➕ Add Extra Single Order"])
+            tab1, tab2, tab3 = st.tabs(["➕ Add Single Order", "📂 Upload Orders via Excel", "⚙️ Admin Order Edit / Update"])
             
             with tab1:
-                st.info("තනි ඇණවුමක් (Single Order) සහ Product Code එක ඇතුළත් කිරීම.")
                 with st.form("monthly_plan_form"):
                     col1, col2 = st.columns(2)
                     with col1:
                         selected_month = st.selectbox("Select Month & Year", months_list)
                         order_name = st.text_input("Order Name / Customer Name")
-                        product_code = st.text_input("Product Code (e.g. PRD-001)")
+                        product_code = st.text_input("Product Code (e.g. 61c075)")
                     with col2:
                         order_no = st.text_input("Order Number")
                         target_qty = st.number_input("Target Quantity (Glove Pairs)", min_value=1, value=100)
                     
-                    submit_plan = st.form_submit_button("Save Monthly Order")
-                    if submit_plan:
+                    if st.form_submit_button("Save Monthly Order"):
                         if order_name and order_no and product_code:
                             new_row = pd.DataFrame({
-                                'Month': [selected_month],
-                                'Order Name': [str(order_name)],
-                                'Order No': [str(order_no)],
-                                'Product Code': [str(product_code)],
+                                'Month': [selected_month], 'Order Name': [str(order_name)],
+                                'Order No': [str(order_no)], 'Product Code': [str(product_code)],
                                 'Target Qty': [int(target_qty)]
                             })
                             st.session_state['orders'] = pd.concat([st.session_state['orders'], new_row], ignore_index=True)
-                            st.success(f"Order for {selected_month} added successfully!")
+                            st.success("Order added successfully!")
                         else:
-                            st.warning("Please fill Order Name, Order No and Product Code.")
+                            st.warning("Please fill all required fields.")
             
             with tab2:
-                st.info("System එකෙන් මාසය (Month) තෝරා, Excel ෆයිල් එක Upload කරන්න (Excel එකේ Month එක අවශ්‍ය නැත).")
-                
                 upload_month_choice = st.selectbox("Select Month for Uploaded Orders", months_list, key="up_month_sel")
-                
                 sample_df = pd.DataFrame({
-                    'Order Name': ['Customer A', 'Customer A', 'Customer B'],
-                    'Order No': ['ORD-001', 'ORD-001', 'ORD-002'],
-                    'Product Code': ['PC-101', 'PC-102', 'PC-201'],
-                    'Target Qty': [500, 300, 1200]
+                    'Order Name': ['Customer A', 'Customer B'], 'Order No': ['ORD-001', 'ORD-002'],
+                    'Product Code': ['61c075', '61c102'], 'Target Qty': [500, 1200]
                 })
                 output_sample = io.BytesIO()
                 with pd.ExcelWriter(output_sample, engine='openpyxl') as writer:
                     sample_df.to_excel(writer, index=False, sheet_name='Template')
-                st.download_button(
-                    label="📥 Download Sample Excel Template",
-                    data=output_sample.getvalue(),
-                    file_name="Order_Upload_Template.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                st.download_button("📥 Download Sample Excel Template", data=output_sample.getvalue(), file_name="Order_Template.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 
                 uploaded_file = st.file_uploader("Upload Excel / CSV File", type=["xlsx", "xls", "csv"])
                 if uploaded_file is not None:
                     try:
-                        if uploaded_file.name.endswith('.csv'):
-                            up_df = pd.read_csv(uploaded_file)
-                        else:
-                            up_df = pd.read_excel(uploaded_file)
-                        
-                        st.write("Uploaded Data Preview:", up_df.head())
-                        
+                        up_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
                         if st.button("🚀 Process & Save Uploaded Orders"):
                             required_cols = ['Order Name', 'Order No', 'Product Code', 'Target Qty']
                             if all(col in up_df.columns for col in required_cols):
                                 up_df['Month'] = upload_month_choice
-                                up_df['Order Name'] = up_df['Order Name'].astype(str)
-                                up_df['Order No'] = up_df['Order No'].astype(str)
-                                up_df['Product Code'] = up_df['Product Code'].astype(str)
                                 up_df['Target Qty'] = up_df['Target Qty'].astype(int)
-                                
-                                up_df = up_df[['Month', 'Order Name', 'Order No', 'Product Code', 'Target Qty']]
-                                
                                 st.session_state['orders'] = pd.concat([st.session_state['orders'], up_df], ignore_index=True)
-                                st.success(f"Successfully imported {len(up_df)} orders for {upload_month_choice}!")
+                                st.success("Orders imported successfully!")
                                 st.rerun()
                             else:
-                                st.error(f"Excel file columns mismatch! Required columns are: {required_cols}")
+                                st.error(f"Columns mismatch! Required: {required_cols}")
                     except Exception as e:
-                        st.error(f"Error reading file: {e}")
+                        st.error(f"Error: {e}")
 
             with tab3:
-                st.info("හදිසි හෝ අමතර Orders (Extra Orders) එකතු කරගැනීමට.")
-                with st.form("extra_order_form"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        ex_month = st.selectbox("Select Month for Extra Order", months_list, key="ex_m")
-                        ex_cust = st.text_input("Extra Order Name / Client")
-                        ex_code = st.text_input("Product Code")
-                    with col2:
-                        ex_no = st.text_input("Extra Order Number")
-                        ex_qty = st.number_input("Extra Quantity", min_value=1, value=50)
-                    
-                    submit_ex = st.form_submit_button("Add Extra Order")
-                    if submit_ex:
-                        if ex_cust and ex_no and ex_code:
-                            new_ex = pd.DataFrame({
-                                'Month': [ex_month],
-                                'Order Name': [str(ex_cust) + " (Extra)"],
-                                'Order No': [str(ex_no)],
-                                'Product Code': [str(ex_code)],
-                                'Target Qty': [int(ex_qty)]
-                            })
-                            st.session_state['orders'] = pd.concat([st.session_state['orders'], new_ex], ignore_index=True)
-                            st.success("Extra Order added successfully!")
-                        else:
-                            st.warning("Please fill required fields.")
+                if role == "Admin":
+                    st.info("Admin Facility: Edit or Update existing orders.")
+                    if not st.session_state['orders'].empty:
+                        order_indices = st.session_state['orders'].index.tolist()
+                        sel_ord_idx = st.selectbox("Select Order Index to Edit", order_indices)
+                        
+                        curr_row = st.session_state['orders'].loc[sel_ord_idx]
+                        with st.form("edit_order_form"):
+                            e_month = st.selectbox("Month", months_list, index=months_list.index(curr_row['Month']) if curr_row['Month'] in months_list else 0)
+                            e_name = st.text_input("Order Name", value=curr_row['Order Name'])
+                            e_no = st.text_input("Order No", value=curr_row['Order No'])
+                            e_code = st.text_input("Product Code", value=curr_row['Product Code'])
+                            e_target = st.number_input("Target Qty", min_value=1, value=int(curr_row['Target Qty']))
+                            
+                            if st.form_submit_button("💾 Update Order"):
+                                st.session_state['orders'].loc[sel_ord_idx] = [e_month, e_name, e_no, e_code, e_target]
+                                st.success("Order updated successfully!")
+                                st.rerun()
+                    else:
+                        st.info("No orders found to edit.")
+                else:
+                    st.warning("Order editing is restricted to Admin users only.")
         
-        st.subheader("📋 Existing Orders & Plans List")
+        st.subheader("📋 Existing Orders List")
         if not st.session_state['orders'].empty:
-            all_months = st.session_state['orders']['Month'].unique()
-            filter_m = st.selectbox("Filter Orders by Month", all_months)
-            filtered_orders = st.session_state['orders'][st.session_state['orders']['Month'] == filter_m]
-            
-            st.dataframe(filtered_orders, use_container_width=True)
-            
+            filter_m = st.selectbox("Filter Orders by Month", st.session_state['orders']['Month'].unique())
+            st.dataframe(st.session_state['orders'][st.session_state['orders']['Month'] == filter_m], use_container_width=True)
             if role == "Admin" and st.button("Clear All Orders Data"):
                 st.session_state['orders'] = pd.DataFrame(columns=st.session_state['orders'].columns)
-                st.success("All orders cleared.")
                 st.rerun()
         else:
-            st.info("No orders or plans found yet.")
+            st.info("No orders found.")
 
-    # --- 3. TEST ENTRY (WITH ADMIN DELETE FACILITY) ---
+    # --- 3. TEST ENTRY (WITH SINGLE HAND / 0.5 CALCULATION) ---
     elif choice == "Test Entry":
         st.header("🧪 Electric Glove Proof Testing Entry")
         
         orders_df = st.session_state['orders']
         if orders_df.empty:
-            st.warning("Please add monthly orders/plans in 'Order & Plan Mgmt' first!")
+            st.warning("Please add orders first!")
         else:
             with st.form("test_form"):
                 col1, col2 = st.columns(2)
                 with col1:
                     test_date = st.date_input("Test Date", datetime.today())
-                    
-                    available_months = orders_df['Month'].unique()
-                    sel_test_month = st.selectbox("Select Month", available_months)
-                    
+                    sel_test_month = st.selectbox("Select Month", orders_df['Month'].unique())
                     month_orders = orders_df[orders_df['Month'] == sel_test_month]
-                    if month_orders.empty:
-                        st.warning("No orders found for this month.")
-                        order_no_sel = ""
-                        prod_code_sel = ""
-                    else:
+                    
+                    if not month_orders.empty:
                         order_no_sel = st.selectbox("Select Order No", month_orders['Order No'].unique())
-                        
                         filtered_codes = month_orders[month_orders['Order No'] == order_no_sel]['Product Code'].unique()
                         prod_code_sel = st.selectbox("Select Product Code", filtered_codes)
                         
-                        match_cust = month_orders[(month_orders['Order No'] == order_no_sel) & (month_orders['Product Code'] == prod_code_sel)]['Order Name'].values
-                        cust_name = match_cust[0] if len(match_cust) > 0 else ""
-                        st.write(f"Order Name: **{cust_name}**")
+                        # Display detected Class
+                        detected_class = get_glove_class(prod_code_sel)
+                        st.info(f"Detected Glove Class: **{detected_class}**")
+                    else:
+                        order_no_sel, prod_code_sel = "", ""
                     
                     machine_no = st.selectbox("Machine Number", ["Machine 01", "Machine 02", "Machine 03", "Machine 04", "Machine 05"])
                 
@@ -302,184 +263,140 @@ else:
                     r_pass = st.number_input("Right Hand Pass Qty", min_value=0, value=0)
                     l_fail = st.number_input("Left Hand Fail Qty", min_value=0, value=0)
                     r_fail = st.number_input("Right Hand Fail Qty", min_value=0, value=0)
-                    remarks = st.text_input("Remarks / Safety Notes")
+                    remarks = st.text_input("Remarks")
                 
-                submit_test = st.form_submit_button("Save Test Entry")
-                if submit_test:
+                if st.form_submit_button("Save Test Entry"):
                     if order_no_sel and prod_code_sel:
-                        pass_pairs = min(l_pass, r_pass)
+                        # Calculation for Pass Pairs supporting single hands (.5 calculation)
+                        full_pairs = min(l_pass, r_pass)
+                        rem_left = l_pass - full_pairs
+                        rem_right = r_pass - full_pairs
+                        pass_pairs_val = full_pairs + (0.5 if (rem_left > 0 or rem_right > 0) else 0.0)
+                        
                         total_fail = l_fail + r_fail
-                        logged_user = st.session_state['username']
                         
                         new_test = pd.DataFrame({
-                            'Date': [str(test_date)],
-                            'Month': [sel_test_month],
-                            'Order No': [order_no_sel],
-                            'Product Code': [prod_code_sel],
-                            'Machine Number': [machine_no],
-                            'Left Pass': [l_pass],
-                            'Right Pass': [r_pass],
-                            'Left Fail': [l_fail],
-                            'Right Fail': [r_fail],
-                            'Pass Pairs': [pass_pairs],
-                            'Total Fail': [total_fail],
-                            'Logged User': [logged_user],
-                            'Remarks': [remarks]
+                            'Date': [str(test_date)], 'Month': [sel_test_month],
+                            'Order No': [order_no_sel], 'Product Code': [prod_code_sel],
+                            'Machine Number': [machine_no], 'Left Pass': [l_pass], 'Right Pass': [r_pass],
+                            'Left Fail': [l_fail], 'Right Fail': [r_fail],
+                            'Pass Pairs': [pass_pairs_val], 'Total Fail': [total_fail],
+                            'Logged User': [st.session_state['username']], 'Remarks': [remarks]
                         })
                         st.session_state['test_entries'] = pd.concat([st.session_state['test_entries'], new_test], ignore_index=True)
-                        st.success(f"Test saved successfully! Pass Pairs calculated: {pass_pairs}")
+                        st.success(f"Test saved! Calculated Pass Qty (Pairs/Single): {pass_pairs_val}")
                     else:
-                        st.error("Please select a valid Order No and Product Code.")
+                        st.error("Select valid Order and Product Code.")
 
-        st.subheader("📋 Recent Glove Test Entries & Management")
-        if not st.session_state['test_entries'].empty:
-            st.dataframe(st.session_state['test_entries'], use_container_width=True)
-            
-            # ADMIN ONLY DELETE SECTION
+        st.subheader("📋 Test Entries & Management")
+        tests_df = st.session_state['test_entries']
+        if not tests_df.empty:
+            st.dataframe(tests_df, use_container_width=True)
             if role == "Admin":
-                st.markdown("---")
-                st.markdown("### 🗑️ Admin Delete Entry Control")
                 with st.form("delete_entry_form"):
-                    entry_indices = st.session_state['test_entries'].index.tolist()
-                    selected_idx_to_delete = st.selectbox("Select Entry Index to Delete", entry_indices)
-                    
-                    # Show preview of row to delete
-                    row_preview = st.session_state['test_entries'].loc[selected_idx_to_delete].to_dict()
-                    st.write("Selected Row Details:", row_preview)
-                    
-                    delete_btn = st.form_submit_button("🗑️ Delete Selected Entry (Admin Only)")
-                    if delete_btn:
-                        st.session_state['test_entries'] = st.session_state['test_entries'].drop(selected_idx_to_delete).reset_index(drop=True)
-                        st.success(f"Test entry index {selected_idx_to_delete} deleted successfully!")
+                    sel_del = st.selectbox("Select Entry Index to Delete", tests_df.index.tolist())
+                    if st.form_submit_button("🗑️ Delete Entry (Admin Only)"):
+                        st.session_state['test_entries'] = tests_df.drop(sel_del).reset_index(drop=True)
+                        st.success("Entry deleted!")
                         st.rerun()
         else:
-            st.info("No test entries recorded yet.")
+            st.info("No test records yet.")
 
-    # --- 4. USER MANAGEMENT (ADMIN ONLY) ---
+    # --- 4. USER MANAGEMENT ---
     elif choice == "User Management" and role == "Admin":
         st.header("👥 Operator & User Management")
-        st.markdown("නව ඔපරේටර්වරුන් හෝ යූසර්වරුන් එකතු කිරීම සඳහා පහත පෝරමය භාවිතා කරන්න.")
-        
         with st.form("add_user_form"):
-            new_username = st.text_input("New Username")
-            new_password = st.text_input("Password", type="password")
-            new_role = st.selectbox("Select Role", ["Operator", "Supervisor", "Admin"])
-            
-            submit_user = st.form_submit_button("➕ Add New User")
-            if submit_user:
-                if new_username and new_password:
-                    if new_username in st.session_state['users']:
-                        st.warning("මෙම Username එක දැනටමත් පවතී!")
-                    else:
-                        st.session_state['users'][new_username] = {
-                            "password": new_password,
-                            "role": new_role
-                        }
-                        st.success(f"Operator ({new_username}) සාර්ථකව එකතු කරන ලදී!")
+            nu = st.text_input("New Username")
+            np = st.text_input("Password", type="password")
+            nr = st.selectbox("Role", ["Operator", "Supervisor", "Admin"])
+            if st.form_submit_button("Add User"):
+                if nu and np:
+                    st.session_state['users'][nu] = {"password": np, "role": nr}
+                    st.success("User added!")
                 else:
-                    st.warning("කරුණාකර Username සහ Password ඇතුළත් කරන්න.")
+                    st.warning("Fill all fields.")
         
-        st.subheader("📋 Current System Operators / Users")
-        users_data = []
-        for uname, uinfo in st.session_state['users'].items():
-            users_data.append({"Username": uname, "Role": uinfo["role"]})
-        
-        users_df = pd.DataFrame(users_data)
+        users_df = pd.DataFrame([{"Username": k, "Role": v["role"]} for k, v in st.session_state['users'].items()])
         st.dataframe(users_df, use_container_width=True)
 
     # --- 5. DASHBOARD ---
     elif choice == "Dashboard":
         st.header("📊 Electric Glove Testing Dashboard")
-        
-        orders_df = st.session_state['orders']
-        tests_df = st.session_state['test_entries']
-        
-        total_orders = len(orders_df)
-        total_target_qty = orders_df['Target Qty'].astype(int).sum() if not orders_df.empty else 0
-        total_pass_pairs = tests_df['Pass Pairs'].astype(int).sum() if not tests_df.empty else 0
-        total_fails = tests_df['Total Fail'].astype(int).sum() if not tests_df.empty else 0
+        orders_df, tests_df = st.session_state['orders'], st.session_state['test_entries']
         
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Order Entries", total_orders)
-        col2.metric("Target Glove Qty", total_target_qty)
-        col3.metric("Total Tested Pass Pairs", total_pass_pairs)
-        col4.metric("Total Defective Fails", total_fails)
+        col1.metric("Total Orders", len(orders_df))
+        col2.metric("Target Qty", orders_df['Target Qty'].astype(int).sum() if not orders_df.empty else 0)
+        col3.metric("Tested Pass Qty", tests_df['Pass Pairs'].astype(float).sum() if not tests_df.empty else 0.0)
+        col4.metric("Total Defective Fails", tests_df['Total Fail'].astype(int).sum() if not tests_df.empty else 0)
         
-        st.markdown("---")
-        st.subheader("📈 Monthly Testing Summary Chart")
         if not tests_df.empty:
-            chart_data = tests_df.groupby('Month')[['Pass Pairs', 'Total Fail']].sum()
-            st.bar_chart(chart_data)
-        else:
-            st.info("Charts will appear once test entries are added.")
+            st.bar_chart(tests_df.groupby('Month')[['Pass Pairs', 'Total Fail']].sum())
 
-    # --- 6. REPORTS & PROGRESS (GROUPED BY ORDER & PRODUCT CODE) ---
+    # --- 6. REPORTS & PROGRESS (CLASS-WISE & REMAINING BASED ON PASS QTY) ---
     elif choice == "Reports":
-        st.header("📈 Monthly Reports & Progress Tracking")
+        st.header("📈 Monthly Reports & Class-wise Breakdown")
         
-        orders_df = st.session_state['orders']
-        tests_df = st.session_state['test_entries']
-        
+        orders_df, tests_df = st.session_state['orders'], st.session_state['test_entries']
         if not orders_df.empty or not tests_df.empty:
-            st.subheader("🗓️ Month-wise Order vs Tested vs Remaining Progress")
-            
-            all_available_months = sorted(list(set(orders_df['Month'].tolist() + tests_df['Month'].tolist()))) if not orders_df.empty else tests_df['Month'].unique()
-            report_month = st.selectbox("Select Month for Report", all_available_months)
+            all_months = sorted(list(set(orders_df['Month'].tolist() + tests_df['Month'].tolist()))) if not orders_df.empty else tests_df['Month'].unique()
+            report_month = st.selectbox("Select Month for Report", all_months)
             
             m_orders = orders_df[orders_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
             m_tests = tests_df[tests_df['Month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
+            st.subheader("🗓️ Order Progress (Remaining calculated from Pass Qty)")
             summary_list = []
             if not m_orders.empty:
                 for idx, row in m_orders.iterrows():
-                    ord_no = row['Order No']
-                    prod_code = row['Product Code']
-                    ord_name = row['Order Name']
-                    target = int(row['Target Qty'])
+                    ord_no, prod_code, target = row['Order No'], row['Product Code'], int(row['Target Qty'])
+                    ord_tests = m_tests[(m_tests['Order No'] == ord_no) & (m_tests['Product Code'] == prod_code)] if not m_tests.empty else pd.DataFrame()
                     
-                    if not m_tests.empty:
-                        ord_tests = m_tests[(m_tests['Order No'] == ord_no) & (m_tests['Product Code'] == prod_code)]
-                    else:
-                        ord_tests = pd.DataFrame()
-                    
-                    tested_qty = int(ord_tests['Pass Pairs'].sum() + ord_tests['Total Fail'].sum()) if not ord_tests.empty else 0
-                    passed_pairs_qty = int(ord_tests['Pass Pairs'].sum()) if not ord_tests.empty else 0
-                    remaining_qty = max(0, target - tested_qty)
+                    passed_qty = float(ord_tests['Pass Pairs'].sum()) if not ord_tests.empty else 0.0
+                    failed_qty = int(ord_tests['Total Fail'].sum()) if not ord_tests.empty else 0
+                    tested_total = passed_qty + failed_qty
+                    remaining_qty = max(0.0, target - passed_qty)  # Remaining based on Pass Qty
                     
                     summary_list.append({
-                        'Order No': ord_no,
-                        'Product Code': prod_code,
-                        'Order Name': ord_name,
-                        'Target Qty': target,
-                        'Tested Qty': tested_qty,
-                        'Pass Pairs': passed_pairs_qty,
-                        'Remaining Qty to Test': remaining_qty
+                        'Order No': ord_no, 'Product Code': prod_code, 'Glove Class': get_glove_class(prod_code),
+                        'Order Name': row['Order Name'], 'Target Qty': target, 'Tested Total': tested_total,
+                        'Pass Qty': passed_qty, 'Fail Qty': failed_qty, 'Remaining Qty to Test': remaining_qty
                     })
             
             if summary_list:
                 summary_df = pd.DataFrame(summary_list)
                 st.dataframe(summary_df, use_container_width=True)
                 
+                # Class-wise Summary Table
+                st.subheader("🛡️ Class-wise Testing Summary")
+                if not summary_df.empty:
+                    class_summary = summary_df.groupby('Glove Class').agg({
+                        'Target Qty': 'sum',
+                        'Pass Qty': 'sum',
+                        'Fail Qty': 'sum',
+                        'Tested Total': 'sum'
+                    }).reset_index()
+                    
+                    # Calculate Fail %
+                    class_summary['Fail %'] = class_summary.apply(lambda r: round((r['Fail Qty'] / r['Tested Total'] * 100), 2) if r['Tested Total'] > 0 else 0.0, axis=1)
+                    st.dataframe(class_summary, use_container_width=True)
+                
+                # Excel Download
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    summary_df.to_excel(writer, index=False, sheet_name='Monthly_Progress_Report')
+                    summary_df.to_excel(writer, index=False, sheet_name='Order_Progress')
+                    if not class_summary.empty:
+                        class_summary.to_excel(writer, index=False, sheet_name='Class_Summary')
                     if not m_tests.empty:
-                        m_tests.to_excel(writer, index=False, sheet_name='Detailed_Test_History')
-                excel_data = output.getvalue()
+                        m_tests.to_excel(writer, index=False, sheet_name='Test_History')
                 
                 st.download_button(
-                    label=f"📥 Download {report_month} Report as Excel",
-                    data=excel_data,
-                    file_name=f"Glove_Testing_Report_{report_month.replace(' ', '_')}.xlsx",
+                    label=f"📥 Download {report_month} Complete Report as Excel",
+                    data=output.getvalue(),
+                    file_name=f"Glove_Report_{report_month.replace(' ', '_')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             else:
-                st.info("No orders found for the selected month.")
-                
-            st.subheader("📋 Detailed Test History Entries (All individual test records)")
-            if not m_tests.empty:
-                st.dataframe(m_tests, use_container_width=True)
-            else:
-                st.info("No test records for this month.")
+                st.info("No orders found for this month.")
         else:
-            st.info("No data available to generate reports.")
+            st.info("No data available.")
