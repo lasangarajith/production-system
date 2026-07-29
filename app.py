@@ -173,11 +173,10 @@ else:
                             st.warning("Please fill Order Name, Order No and Product Code.")
             
             with tab2:
-                st.info("System එකෙන් මාසය (Month) තෝරා, Excel ෆයිල් එක Upload කරන්න (Excel එකේ Month column එක අවශ්‍ය නැත).")
+                st.info("System එකෙන් මාසය (Month) තෝරා, Excel ෆයිල් එක Upload කරන්න (Excel එකේ Month එක අවශ්‍ය නැත).")
                 
                 upload_month_choice = st.selectbox("Select Month for Uploaded Orders", months_list, key="up_month_sel")
                 
-                # Sample Download Button
                 sample_df = pd.DataFrame({
                     'Order Name': ['Customer A', 'Customer A', 'Customer B'],
                     'Order No': ['ORD-001', 'ORD-001', 'ORD-002'],
@@ -207,14 +206,12 @@ else:
                         if st.button("🚀 Process & Save Uploaded Orders"):
                             required_cols = ['Order Name', 'Order No', 'Product Code', 'Target Qty']
                             if all(col in up_df.columns for col in required_cols):
-                                # Assign selected month to all rows in uploaded file
                                 up_df['Month'] = upload_month_choice
                                 up_df['Order Name'] = up_df['Order Name'].astype(str)
                                 up_df['Order No'] = up_df['Order No'].astype(str)
                                 up_df['Product Code'] = up_df['Product Code'].astype(str)
                                 up_df['Target Qty'] = up_df['Target Qty'].astype(int)
                                 
-                                # Reorder columns
                                 up_df = up_df[['Month', 'Order Name', 'Order No', 'Product Code', 'Target Qty']]
                                 
                                 st.session_state['orders'] = pd.concat([st.session_state['orders'], up_df], ignore_index=True)
@@ -267,7 +264,7 @@ else:
         else:
             st.info("No orders or plans found yet.")
 
-    # --- 3. TEST ENTRY (WITH PRODUCT CODE DROPDOWN) ---
+    # --- 3. TEST ENTRY (WITH ADMIN DELETE FACILITY) ---
     elif choice == "Test Entry":
         st.header("🧪 Electric Glove Proof Testing Entry")
         
@@ -291,7 +288,6 @@ else:
                     else:
                         order_no_sel = st.selectbox("Select Order No", month_orders['Order No'].unique())
                         
-                        # Filter product codes based on selected order number
                         filtered_codes = month_orders[month_orders['Order No'] == order_no_sel]['Product Code'].unique()
                         prod_code_sel = st.selectbox("Select Product Code", filtered_codes)
                         
@@ -335,9 +331,27 @@ else:
                     else:
                         st.error("Please select a valid Order No and Product Code.")
 
-        st.subheader("📋 Recent Glove Test Entries")
+        st.subheader("📋 Recent Glove Test Entries & Management")
         if not st.session_state['test_entries'].empty:
             st.dataframe(st.session_state['test_entries'], use_container_width=True)
+            
+            # ADMIN ONLY DELETE SECTION
+            if role == "Admin":
+                st.markdown("---")
+                st.markdown("### 🗑️ Admin Delete Entry Control")
+                with st.form("delete_entry_form"):
+                    entry_indices = st.session_state['test_entries'].index.tolist()
+                    selected_idx_to_delete = st.selectbox("Select Entry Index to Delete", entry_indices)
+                    
+                    # Show preview of row to delete
+                    row_preview = st.session_state['test_entries'].loc[selected_idx_to_delete].to_dict()
+                    st.write("Selected Row Details:", row_preview)
+                    
+                    delete_btn = st.form_submit_button("🗑️ Delete Selected Entry (Admin Only)")
+                    if delete_btn:
+                        st.session_state['test_entries'] = st.session_state['test_entries'].drop(selected_idx_to_delete).reset_index(drop=True)
+                        st.success(f"Test entry index {selected_idx_to_delete} deleted successfully!")
+                        st.rerun()
         else:
             st.info("No test entries recorded yet.")
 
@@ -413,7 +427,7 @@ else:
             report_month = st.selectbox("Select Month for Report", all_available_months)
             
             m_orders = orders_df[orders_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
-            m_tests = tests_df[tests_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
+            m_tests = tests_df[tests_df['Month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
             summary_list = []
             if not m_orders.empty:
@@ -423,7 +437,6 @@ else:
                     ord_name = row['Order Name']
                     target = int(row['Target Qty'])
                     
-                    # Filter tests matching both Order No and Product Code
                     if not m_tests.empty:
                         ord_tests = m_tests[(m_tests['Order No'] == ord_no) & (m_tests['Product Code'] == prod_code)]
                     else:
