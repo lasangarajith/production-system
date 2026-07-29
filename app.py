@@ -229,7 +229,7 @@ else:
         else:
             st.info("No orders found.")
 
-    # --- 3. TEST ENTRY (WITH 0.5 FOR DAILY / TEST ENTRIES) ---
+    # --- 3. TEST ENTRY ---
     elif choice == "Test Entry":
         st.header("🧪 Electric Glove Proof Testing Entry")
         
@@ -330,7 +330,7 @@ else:
         if not tests_df.empty:
             st.bar_chart(tests_df.groupby('Month')[['Pass Pairs', 'Total Fail']].sum())
 
-    # --- 6. REPORTS & PROGRESS (WHOLE NUMBERS FOR ORDER PROGRESS) ---
+    # --- 6. REPORTS & PROGRESS ---
     elif choice == "Reports":
         st.header("📈 Monthly Reports & Class-wise Breakdown")
         
@@ -342,28 +342,46 @@ else:
             m_orders = orders_df[orders_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
             m_tests = tests_df[tests_df['Month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
-            # --- 1. Order Progress Table (Whole Numbers for Pass, Fail, Tested Total & Remaining) ---
-            st.subheader("🗓️ Order Progress (Whole Numbers)")
+            # --- 1. Order Progress Table (Only Tested Orders Included & Completed Highlighted) ---
+            st.subheader("🗓️ Order Progress")
             summary_list = []
             if not m_orders.empty:
                 for idx, row in m_orders.iterrows():
                     ord_no, prod_code, target = row['Order No'], row['Product Code'], int(row['Target Qty'])
                     ord_tests = m_tests[(m_tests['Order No'] == ord_no) & (m_tests['Product Code'] == prod_code)] if not m_tests.empty else pd.DataFrame()
                     
-                    passed_qty = int(ord_tests['Pass Pairs'].astype(float).sum()) if not ord_tests.empty else 0
-                    failed_qty = int(ord_tests['Total Fail'].sum()) if not ord_tests.empty else 0
-                    tested_total = passed_qty + failed_qty
+                    # Skip orders that haven't been tested at all (Tested Total == 0)
+                    if ord_tests.empty:
+                        continue
+                        
+                    total_tested = int((ord_tests['Left Pass'] + ord_tests['Right Pass'] + ord_tests['Left Fail'] + ord_tests['Right Fail']).sum())
+                    
+                    if total_tested == 0:
+                        continue
+                        
+                    passed_qty = int(ord_tests['Pass Pairs'].astype(float).sum())
+                    failed_qty = int(ord_tests['Total Fail'].sum())
                     remaining_qty = max(0, target - passed_qty)
                     
                     summary_list.append({
                         'Order No': ord_no, 'Product Code': prod_code, 'Glove Class': get_glove_class(prod_code),
-                        'Order Name': row['Order Name'], 'Target Qty': target, 'Tested Total': tested_total,
+                        'Order Name': row['Order Name'], 'Target Qty': target, 'Tested Total': total_tested,
                         'Pass Qty': passed_qty, 'Fail Qty': failed_qty, 'Remaining Qty to Test': remaining_qty
                     })
             
             if summary_list:
                 summary_df = pd.DataFrame(summary_list)
-                st.dataframe(summary_df, use_container_width=True)
+                
+                # Function to highlight completed orders in light green
+                def highlight_completed(row_data):
+                    if row_data['Pass Qty'] >= row_data['Target Qty']:
+                        return ['background-color: #D4EDDA'] * len(row_data)
+                    return [''] * len(row_data)
+                
+                styled_summary_df = summary_df.style.apply(highlight_completed, axis=1)
+                st.dataframe(styled_summary_df, use_container_width=True)
+            else:
+                st.info("No active test orders found for this month.")
             
             # --- 2. Class-wise Testing Summary ---
             st.subheader("🛡️ Class-wise Testing Summary (Daily & Total)")
@@ -382,7 +400,7 @@ else:
                 daily_class_summary['Tested Total'] = daily_class_summary['Pass Pairs'] + daily_class_summary['Total Fail']
                 daily_class_summary['Fail %'] = daily_class_summary.apply(lambda r: round((r['Total Fail'] / r['Tested Total'] * 100), 2) if r['Tested Total'] > 0 else 0.0, axis=1)
                 
-                st.markdown(f"**📅 Date: {selected_date} - Class-wise Test Qty (With .5 decimals if single hand)**")
+                st.markdown(f"**📅 Date: {selected_date} - Class-wise Test Qty**")
                 st.dataframe(daily_class_summary, use_container_width=True)
                 
                 st.markdown("**📊 Monthly Total Class-wise Summary**")
