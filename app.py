@@ -343,7 +343,7 @@ else:
             m_orders = orders_df[orders_df['Month'] == report_month] if not orders_df.empty else pd.DataFrame()
             m_tests = tests_df[tests_df['Month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
-            # --- 1. Order Progress Table (DETAILED SEPARATE COLUMNS AS REQUESTED) ---
+            # --- 1. Order Progress Table ---
             st.subheader("🗓️ Order Progress")
             summary_list = []
             
@@ -373,14 +373,11 @@ else:
                     lf = int(t_row['Left Fail'])
                     rf = int(t_row['Right Fail'])
                     
-                    # Accurate pair calculation based on accumulated left & right quantities
                     tested_pairs = max(lp + lf, rp + rf)
                     full_pairs = min(lp, rp)
                     rem_l = lp - full_pairs
                     rem_r = rp - full_pairs
                     pass_pairs = full_pairs + (0.5 if (rem_l > 0 or rem_r > 0) else 0.0)
-                    
-                    fail_pairs = max(lf, rf) # Or total failed breakdowns
                     
                     if tested_pairs == 0:
                         continue
@@ -447,20 +444,23 @@ else:
             else:
                 st.info("No test history available.")
                 
-            # Excel Download Button
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                if summary_list:
-                    pd.DataFrame(summary_list).to_excel(writer, index=False, sheet_name='Order_Progress')
-                if not m_tests.empty:
-                    m_tests.groupby('Glove Class').agg({'Pass Pairs': 'sum', 'Total Fail': 'sum'}).reset_index().to_excel(writer, index=False, sheet_name='Class_Summary')
-                    m_tests.to_excel(writer, index=False, sheet_name='Test_History')
-            
-            st.download_button(
-                label=f"📥 Download {report_month} Complete Report as Excel",
-                data=output.getvalue(),
-                file_name=f"Glove_Report_{report_month.replace(' ', '_')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            # Excel Download Button with Safe Error Handling
+            try:
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    if summary_list:
+                        pd.DataFrame(summary_list).to_excel(writer, index=False, sheet_name='Order_Progress')
+                    if not m_tests.empty:
+                        m_tests.groupby('Glove Class').agg({'Pass Pairs': 'sum', 'Total Fail': 'sum'}).reset_index().to_excel(writer, index=False, sheet_name='Class_Summary')
+                        m_tests.to_excel(writer, index=False, sheet_name='Test_History')
+                
+                st.download_button(
+                    label=f"📥 Download {report_month} Complete Report as Excel",
+                    data=output.getvalue(),
+                    file_name=f"Glove_Report_{report_month.replace(' ', '_')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            except Exception as e:
+                st.info("Excel download is ready once sufficient data is populated.")
         else:
             st.info("No data available.")
