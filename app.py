@@ -42,7 +42,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Session State
+# Initialize Session State securely so data persists during user sessions
 if 'users' not in st.session_state:
     st.session_state['users'] = {
         "admin": {"password": "123", "role": "Admin"},
@@ -163,7 +163,7 @@ else:
                                 'Target Qty': [int(target_qty)]
                             })
                             st.session_state['orders'] = pd.concat([st.session_state['orders'], new_row], ignore_index=True)
-                            st.success("Order added successfully!")
+                            st.success("✅ Order added successfully and saved to session!")
                         else:
                             st.warning("Please fill all required fields.")
             
@@ -223,6 +223,13 @@ else:
         if not st.session_state['orders'].empty:
             filter_m = st.selectbox("Filter Orders by Month", st.session_state['orders']['Month'].unique())
             st.dataframe(st.session_state['orders'][st.session_state['orders']['Month'] == filter_m], use_container_width=True)
+            
+            # Export Orders to Excel Button
+            orders_output = io.BytesIO()
+            with pd.ExcelWriter(orders_output, engine='openpyxl') as writer:
+                st.session_state['orders'].to_excel(writer, index=False, sheet_name='All_Orders')
+            st.download_button("📥 Download All Orders to Excel (Backup)", data=orders_output.getvalue(), file_name="All_Orders_Backup.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            
             if role == "Admin" and st.button("Clear All Orders Data"):
                 st.session_state['orders'] = pd.DataFrame(columns=st.session_state['orders'].columns)
                 st.rerun()
@@ -235,13 +242,15 @@ else:
         
         orders_df = st.session_state['orders']
         if orders_df.empty:
-            st.warning("Please add orders first!")
+            st.warning("⚠️ කරුණාකර පළමුව Order & Plan Management වෙත ගොස් Order එකක් ඇතුළත් කරන්න!")
         else:
             with st.form("test_form"):
                 col1, col2 = st.columns(2)
                 with col1:
                     test_date = st.date_input("Test Date", datetime.today())
-                    sel_test_month = st.selectbox("Select Month", orders_df['Month'].unique())
+                    available_order_months = orders_df['Month'].unique().tolist()
+                    sel_test_month = st.selectbox("Select Month", available_order_months)
+                    
                     month_orders = orders_df[orders_df['Month'] == sel_test_month]
                     
                     if not month_orders.empty:
@@ -253,6 +262,7 @@ else:
                         st.info(f"Detected Glove Class: **{detected_class}**")
                     else:
                         order_no_sel, prod_code_sel = "", ""
+                        st.warning("මෙම මාසයට අදාළ Orders හමුවී නැත.")
                     
                     machine_no = st.selectbox("Machine Number", ["Machine 01", "Machine 02", "Machine 03", "Machine 04", "Machine 05"])
                 
@@ -263,7 +273,9 @@ else:
                     r_fail = st.number_input("Right Hand Fail Qty", min_value=0, value=0)
                     remarks = st.text_input("Remarks")
                 
-                if st.form_submit_button("Save Test Entry"):
+                submit_test = st.form_submit_button("Save Test Entry")
+                
+                if submit_test:
                     if order_no_sel and prod_code_sel:
                         tested_pairs = max(l_pass + l_fail, r_pass + r_fail)
                         full_pairs = min(l_pass, r_pass)
@@ -281,10 +293,11 @@ else:
                             'Tested Pairs': [tested_pairs], 'Pass Pairs': [pass_pairs_val], 'Total Fail': [total_fail],
                             'Logged User': [st.session_state['username']], 'Remarks': [remarks]
                         })
+                        
                         st.session_state['test_entries'] = pd.concat([st.session_state['test_entries'], new_test], ignore_index=True)
-                        st.success(f"Test saved! Tested Pairs: {tested_pairs}, Pass Pairs: {pass_pairs_val}")
+                        st.success(f"✅ Test successfully saved! Tested Pairs: {tested_pairs}, Pass Pairs: {pass_pairs_val}")
                     else:
-                        st.error("Select valid Order and Product Code.")
+                        st.error("❌ කරුණාකර නිවැරදි Order No සහ Product Code එකක් තෝරන්න.")
 
         st.subheader("📋 Test Entries & Management")
         tests_df = st.session_state['test_entries']
@@ -396,7 +409,6 @@ else:
             if summary_list:
                 summary_df = pd.DataFrame(summary_list)
                 
-                # දශම ස්ථාන අනවශ්‍ය ලෙස දිස්වීම වැළැක්වීම (50.0 -> 50)
                 summary_df['Pass Pairs'] = summary_df['Pass Pairs'].apply(lambda x: int(x) if x % 1 == 0 else round(x, 1))
                 summary_df['Remaining Qty to Test'] = summary_df['Remaining Qty to Test'].apply(lambda x: int(x) if x % 1 == 0 else round(x, 1))
                 
@@ -448,7 +460,7 @@ else:
             else:
                 st.info("No test history available.")
                 
-            # Excel Download Button with Safe Error Handling
+            # Excel Download Button
             try:
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
