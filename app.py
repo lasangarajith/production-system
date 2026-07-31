@@ -134,7 +134,6 @@ def login_screen():
                 st.session_state['username'] = username
                 st.session_state['role'] = user_data[1]
                 
-                # Save login state in URL parameters to prevent logout on refresh
                 st.query_params["user"] = username
                 st.query_params["role"] = user_data[1]
                 
@@ -171,7 +170,6 @@ else:
         st.session_state['logged_in'] = False
         st.session_state['username'] = ""
         st.session_state['role'] = ""
-        # Clear query parameters on logout
         st.query_params.clear()
         st.rerun()
 
@@ -380,17 +378,72 @@ else:
     # --- 5. DASHBOARD ---
     elif choice == "Dashboard":
         st.header("📊 Electric Glove Testing Dashboard")
+        
         orders_df = pd.read_sql("SELECT * FROM orders", conn)
         tests_df = pd.read_sql("SELECT * FROM test_entries", conn)
         
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Orders", len(orders_df))
-        col2.metric("Target Qty", orders_df['target_qty'].astype(int).sum() if not orders_df.empty else 0)
-        col3.metric("Tested Pass Qty", int(tests_df['pass_pairs'].astype(float).sum()) if not tests_df.empty else 0)
-        col4.metric("Total Defective Fails", tests_df['total_fail'].astype(int).sum() if not tests_df.empty else 0)
-        
-        if not tests_df.empty:
-            st.bar_chart(tests_df.groupby('month')[['pass_pairs', 'total_fail']].sum())
+        if not orders_df.empty or not tests_df.empty:
+            # Combine available months from orders and tests for the dashboard filter
+            all_db_months = sorted(list(set(orders_df['month'].tolist() if not orders_df.empty else [] + 
+                                            tests_df['month'].tolist() if not tests_df.empty else [])))
+            # Fallback to standard months list if db is empty
+            available_months = all_db_months if all_db_months else months_list
+            
+            # Month & Year selection filter for Dashboard
+            dash_col1, dash_col2 = st.columns([2, 4])
+            with dash_col1:
+                selected_dash_month = st.selectbox("📅 Select Month & Year for Dashboard", available_months, key="dash_month_sel")
+            
+            # Filter data based on selected month
+            f_orders = orders_df[orders_df['month'] == selected_dash_month] if not orders_df.empty else pd.DataFrame()
+            f_tests = tests_df[tests_df['month'] == selected_dash_month] if not tests_df.empty else pd.DataFrame()
+            
+            st.markdown(f"### 📋 Summary for: **{selected_dash_month}**")
+            
+            # Metrics Row for Selected Month
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Total Orders", len(f_orders))
+            col2.metric("Target Qty (Pairs)", int(f_orders['target_qty'].astype(int).sum()) if not f_orders.empty else 0)
+            col3.metric("Tested Pass Qty", int(f_tests['pass_pairs'].astype(float).sum()) if not f_tests.empty else 0)
+            col4.metric("Total Defective Fails", int(f_tests['total_fail'].astype(int).sum()) if not f_tests.empty else 0)
+            
+            st.markdown("---")
+            
+            # Charts and Detailed breakdowns for the selected month
+            if not f_tests.empty:
+                st.subheader(f"📈 Daily Testing Performance - {selected_dash_month}")
+                daily_chart_df = f_tests.groupby('date')[['pass_pairs', 'total_fail']].sum()
+                st.bar_chart(daily_chart_df)
+                
+                # Class-wise summary for the selected month using 0.5 pair calculation
+                st.subheader(f"🛡️ Class-wise Breakdown - {selected_dash_month}")
+                f_tests['Glove Class'] = f_tests['product_code'].apply(get_glove_class)
+                
+                class_summary_list = []
+                for g_class, g_df in f_tests.groupby('Glove Class'):
+                    sum_lp = g_df['left_pass'].sum()
+                    sum_rp = g_df['right_pass'].sum()
+                    sum_lf = g_df['left_fail'].sum()
+                    sum_rf = g_df['right_fail'].sum()
+                    
+                    c_tested_pairs = (sum_lp + sum_rp + sum_lf + sum_rf) / 2.0
+                    c_pass_pairs = (sum_lp + sum_rp) / 2.0
+                    c_total_fail = (sum_lf + sum_rf) / 2.0
+                    c_fail_pct = round((c_total_fail / c_tested_pairs * 100), 2) if c_tested_pairs > 0 else 0.0
+                    
+                    class_summary_list.append({
+                        'Glove Class': g_class,
+                        'Tested Pairs': c_tested_pairs,
+                        'Pass Pairs': c_pass_pairs,
+                        'Total Fail': c_total_fail,
+                        'Fail %': c_fail_pct
+                    })
+                
+                st.dataframe(pd.DataFrame(class_summary_list), use_container_width=True)
+            else:
+                st.info(f"ℹ️ No test records found for {selected_dash_month}.")
+        else:
+            st.info("No data available in the system yet.")
 
     # --- 6. REPORTS & PROGRESS ---
     elif choice == "Reports":
@@ -404,7 +457,7 @@ else:
             report_month = st.selectbox("Select Month for Report", all_months)
             
             m_orders = orders_df[orders_df['month'] == report_month] if not orders_df.empty else pd.DataFrame()
-            m_tests = tests_df[tests_df['month'] == report_month] if not tests_df.empty else pd.DataFrame()
+            m_tests = tests_df[tests_df['month'] == report_month] if not orders_df.empty else pd.DataFrame()
             
             # --- 1. Order Progress Table ---
             st.subheader("🗓️ Order Progress (Cumulative Pairs & Single Hands)")
