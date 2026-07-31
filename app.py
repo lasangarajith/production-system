@@ -306,18 +306,20 @@ else:
                 
                 if submit_test:
                     if order_no_sel and prod_code_sel:
-                        # නිවැරදි ගණනය කිරීම: තනි අත් (Single Hands) සඳහා ද දත්ත නිවැරදිව ඇතුළත් වීම
-                        tested_pairs = (max(l_pass + l_fail, r_pass + r_fail)) / 2.0
-                        pass_pairs_val = (l_pass + r_pass) / 2.0
+                        # Database එකේ එකතු කිරීමට අවශ්‍ය අගයන් ගණනය කිරීම
+                        total_l_tested = l_pass + l_fail
+                        total_r_tested = r_pass + r_fail
+                        tested_pairs = max(total_l_tested, total_r_tested)
+                        pass_pairs_val = min(l_pass, r_pass)
                         total_fail = l_fail + r_fail
                         
                         cursor = conn.cursor()
                         cursor.execute("""
                             INSERT INTO test_entries (date, month, order_no, product_code, machine_number, left_pass, right_pass, left_fail, right_fail, tested_pairs, pass_pairs, total_fail, logged_user, remarks)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (str(test_date), sel_test_month, order_no_sel, prod_code_sel, machine_no, l_pass, r_pass, l_fail, r_fail, tested_pairs, pass_pairs_val, total_fail, st.session_state['username'], remarks))
+                        """, (str(test_date), sel_test_month, order_no_sel, prod_code_sel, machine_no, l_pass, r_pass, l_fail, r_fail, float(tested_pairs), float(pass_pairs_val), int(total_fail), st.session_state['username'], remarks))
                         conn.commit()
-                        st.success(f"✅ Test successfully saved to Database! Tested Units (Pairs equiv): {tested_pairs}, Pass Units: {pass_pairs_val}")
+                        st.success(f"✅ Test successfully saved to Database!")
                     else:
                         st.error("❌ කරුණාකර නිවැරදි Order No සහ Product Code එකක් තෝරන්න.")
 
@@ -368,7 +370,7 @@ else:
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Orders", len(orders_df))
         col2.metric("Target Qty", orders_df['target_qty'].astype(int).sum() if not orders_df.empty else 0)
-        col3.metric("Tested Pass Qty", round(tests_df['pass_pairs'].astype(float).sum(), 1) if not tests_df.empty else 0)
+        col3.metric("Tested Pass Qty", int(tests_df['pass_pairs'].astype(float).sum()) if not tests_df.empty else 0)
         col4.metric("Total Defective Fails", tests_df['total_fail'].astype(int).sum() if not tests_df.empty else 0)
         
         if not tests_df.empty:
@@ -411,14 +413,21 @@ else:
                         order_name = "Unknown / Direct"
                         target = 0
                     
-                    lp = int(t_row['left_pass'])
-                    rp = int(t_row['right_pass'])
-                    lf = int(t_row['left_fail'])
-                    rf = int(t_row['right_fail'])
+                    tot_lp = int(t_row['left_pass'])
+                    tot_rp = int(t_row['right_pass'])
+                    tot_lf = int(t_row['left_fail'])
+                    tot_rf = int(t_row['right_fail'])
                     
-                    # තනි අත් සහ ජෝඩු එකතුව නිවැරදිව Pair ගණනට හැරවීම (උදා: Left 2 ක් නම් 2/2 = 1 pair එකක් ලෙස හෝ දශම ලෙස එකතු වීම)
-                    tested_pairs = (max(lp + lf, rp + rf)) / 2.0
-                    pass_pairs = (lp + rp) / 2.0
+                    # Order Progress සඳහා අවශ්‍ය නිවැරදි ගණනය කිරීම්:
+                    tot_l_tested = tot_lp + tot_lf
+                    tot_r_tested = tot_rp + tot_rf
+                    tested_pairs = max(tot_l_tested, tot_r_tested)
+                    pass_pairs = min(tot_lp, tot_rp)
+                    
+                    pass_left = tot_lp - pass_pairs
+                    pass_right = tot_rp - pass_pairs
+                    fail_left = tot_lf
+                    fail_right = tot_rf
                     
                     if tested_pairs == 0:
                         continue
@@ -429,16 +438,13 @@ else:
                         'Order No': ord_no, 'Product Code': prod_code, 'Glove Class': get_glove_class(prod_code),
                         'Order Name': order_name, 'Target Qty': target, 
                         'Tested Pairs': tested_pairs, 'Pass Pairs': pass_pairs, 
-                        'Pass Left Hand': lp, 'Pass Right Hand': rp, 
-                        'Fail Left Hand': lf, 'Fail Right Hand': rf, 
+                        'Pass Left Hand': pass_left, 'Pass Right Hand': pass_right, 
+                        'Fail Left Hand': fail_left, 'Fail Right Hand': fail_right, 
                         'Remaining Qty to Test': remaining_qty
                     })
             
             if summary_list:
                 summary_df = pd.DataFrame(summary_list)
-                summary_df['Tested Pairs'] = summary_df['Tested Pairs'].apply(lambda x: int(x) if x % 1 == 0 else round(x, 1))
-                summary_df['Pass Pairs'] = summary_df['Pass Pairs'].apply(lambda x: int(x) if x % 1 == 0 else round(x, 1))
-                summary_df['Remaining Qty to Test'] = summary_df['Remaining Qty to Test'].apply(lambda x: int(x) if x % 1 == 0 else round(x, 1))
                 
                 def highlight_completed(row_data):
                     if row_data['Target Qty'] > 0 and row_data['Pass Pairs'] >= row_data['Target Qty']:
@@ -460,23 +466,56 @@ else:
                 
                 daily_tests = m_tests[m_tests['date'] == selected_date]
                 
-                daily_class_summary = daily_tests.groupby('Glove Class').agg({
-                    'pass_pairs': 'sum', 'total_fail': 'sum'
-                }).reset_index()
-                daily_class_summary.columns = ['Glove Class', 'Pass Pairs', 'Total Fail']
-                daily_class_summary['Tested Total'] = daily_class_summary['Pass Pairs'] + daily_class_summary['Total Fail']
-                daily_class_summary['Fail %'] = daily_class_summary.apply(lambda r: round((r['Total Fail'] / r['Tested Total'] * 100), 2) if r['Tested Total'] > 0 else 0.0, axis=1)
+                # Class-wise තනි අත් දශම (0.5) ලෙස පෙන්වීම සඳහා සැකසීම
+                daily_summary_list = []
+                for g_class, g_df in daily_tests.groupby('Glove Class'):
+                    d_lp = g_df['left_pass'].sum()
+                    d_rp = g_df['right_pass'].sum()
+                    d_lf = g_df['left_fail'].sum()
+                    d_rf = g_df['right_fail'].sum()
+                    
+                    d_tested = max(d_lp + d_lf, d_rp + d_rf) / 2.0
+                    d_pass = min(d_lp, d_rp) + (abs(d_lp - d_rp) / 2.0 if d_lp != d_rp else 0) # තනි අත් සඳහා අර්ධ ජෝඩු සැකසීම
+                    # වඩාත් නිරවද්‍ය ලෙස Class-wise Pass/Fail Pairs දශම ලෙස පෙන්වීම:
+                    d_pass_pairs = (d_lp + d_rp) / 2.0
+                    d_fail_pairs = (d_lf + d_rf) / 2.0
+                    d_tested_total = d_pass_pairs + d_fail_pairs
+                    d_fail_pct = round((d_fail_pairs / d_tested_total * 100), 2) if d_tested_total > 0 else 0.0
+                    
+                    daily_summary_list.append({
+                        'Glove Class': g_class,
+                        'Pass Pairs': d_pass_pairs,
+                        'Total Fail': d_fail_pairs,
+                        'Tested Total': d_tested_total,
+                        'Fail %': d_fail_pct
+                    })
                 
+                daily_class_summary = pd.DataFrame(daily_summary_list)
                 st.markdown(f"**📅 Date: {selected_date} - Class-wise Test Qty**")
                 st.dataframe(daily_class_summary, use_container_width=True)
                 
                 st.markdown("**📊 Monthly Total Class-wise Summary**")
-                monthly_class_summary = m_tests.groupby('Glove Class').agg({
-                    'pass_pairs': 'sum', 'total_fail': 'sum'
-                }).reset_index()
-                monthly_class_summary.columns = ['Glove Class', 'Pass Pairs', 'Total Fail']
-                monthly_class_summary['Tested Total'] = monthly_class_summary['Pass Pairs'] + monthly_class_summary['Total Fail']
-                monthly_class_summary['Fail %'] = monthly_class_summary.apply(lambda r: round((r['Total Fail'] / r['Tested Total'] * 100), 2) if r['Tested Total'] > 0 else 0.0, axis=1)
+                monthly_summary_list = []
+                for g_class, g_df in m_tests.groupby('Glove Class'):
+                    m_lp = g_df['left_pass'].sum()
+                    m_rp = g_df['right_pass'].sum()
+                    m_lf = g_df['left_fail'].sum()
+                    m_rf = g_df['right_fail'].sum()
+                    
+                    m_pass_pairs = (m_lp + m_rp) / 2.0
+                    m_fail_pairs = (m_lf + m_rf) / 2.0
+                    m_tested_total = m_pass_pairs + m_fail_pairs
+                    m_fail_pct = round((m_fail_pairs / m_tested_total * 100), 2) if m_tested_total > 0 else 0.0
+                    
+                    monthly_summary_list.append({
+                        'Glove Class': g_class,
+                        'Pass Pairs': m_pass_pairs,
+                        'Total Fail': m_fail_pairs,
+                        'Tested Total': m_tested_total,
+                        'Fail %': m_fail_pct
+                    })
+                
+                monthly_class_summary = pd.DataFrame(monthly_summary_list)
                 st.dataframe(monthly_class_summary, use_container_width=True)
             else:
                 st.info("No test records found for this month.")
@@ -495,7 +534,6 @@ else:
                     if summary_list:
                         pd.DataFrame(summary_list).to_excel(writer, index=False, sheet_name='Order_Progress')
                     if not m_tests.empty:
-                        m_tests.groupby(m_tests['product_code'].apply(get_glove_class)).agg({'pass_pairs': 'sum', 'total_fail': 'sum'}).reset_index().to_excel(writer, index=False, sheet_name='Class_Summary')
                         m_tests.to_excel(writer, index=False, sheet_name='Test_History')
                 
                 st.download_button(
