@@ -306,11 +306,10 @@ else:
                 
                 if submit_test:
                     if order_no_sel and prod_code_sel:
-                        # එක් එක් ඇතුළත් කිරීම සඳහා Tested Pairs සහ Pass Pairs නිවැරදිව ගණනය කිරීම
                         entry_l_tested = l_pass + l_fail
                         entry_r_tested = r_pass + r_fail
                         entry_tested_pairs = max(entry_l_tested, entry_r_tested) / 2.0
-                        entry_pass_pairs = min(l_pass, r_pass) + (abs(l_pass - r_pass) / 2.0 if l_pass != r_pass else 0) # තනි අත් දශම ලෙස එකතු වීම
+                        entry_pass_pairs = min(l_pass, r_pass) + (abs(l_pass - r_pass) / 2.0 if l_pass != r_pass else 0)
                         total_fail = l_fail + r_fail
                         
                         cursor = conn.cursor()
@@ -418,7 +417,6 @@ else:
                     tot_lf = int(t_row['left_fail'])
                     tot_rf = int(t_row['right_fail'])
                     
-                    # සම්පූර්ණ (Cumulative) අත් එකතුව මත Tested Pairs සහ Pass Pairs නිවැරදිව සෙවීම:
                     tot_l_tested = tot_lp + tot_lf
                     tot_r_tested = tot_rp + tot_rf
                     tested_pairs = max(tot_l_tested, tot_r_tested)
@@ -466,7 +464,6 @@ else:
                 
                 daily_tests = m_tests[m_tests['date'] == selected_date]
                 
-                # Daily Class Summary (දශම අගයන් සහිතව)
                 daily_summary_list = []
                 for g_class, g_df in daily_tests.groupby('Glove Class'):
                     d_lp = g_df['left_pass'].sum()
@@ -514,11 +511,9 @@ else:
                         'Glove Class': g_class,
                         'Tested Pairs': m_tested_pairs,
                         'Pass Pairs': m_pass_pairs,
-                        *('Total Fail', m_fail_pairs),
+                        'Total Fail': m_fail_pairs,
                         'Fail %': m_fail_pct
                     })
-                    # Note: Python dictionary key definition fix
-                    monthly_summary_list[-1]['Total Fail'] = m_fail_pairs
                 
                 monthly_class_summary = pd.DataFrame(monthly_summary_list)
                 st.dataframe(monthly_class_summary, use_container_width=True)
