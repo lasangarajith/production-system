@@ -82,13 +82,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Session State securely (Preventing unintended resets on minor reruns)
+# --- PERSISTENT SESSION STATE WITH QUERY PARAMS ---
+query_params = st.query_params
+
 if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
-if 'username' not in st.session_state:
-    st.session_state['username'] = ""
-if 'role' not in st.session_state:
-    st.session_state['role'] = ""
+    if "user" in query_params and "role" in query_params:
+        st.session_state['logged_in'] = True
+        st.session_state['username'] = query_params["user"]
+        st.session_state['role'] = query_params["role"]
+    else:
+        st.session_state['logged_in'] = False
+        st.session_state['username'] = ""
+        st.session_state['role'] = ""
 
 # Helper Function for Glove Class
 def get_glove_class(prod_code):
@@ -128,6 +133,11 @@ def login_screen():
                 st.session_state['logged_in'] = True
                 st.session_state['username'] = username
                 st.session_state['role'] = user_data[1]
+                
+                # Save login state in URL parameters to prevent logout on refresh
+                st.query_params["user"] = username
+                st.query_params["role"] = user_data[1]
+                
                 st.success(f"Welcome {username.capitalize()}!")
                 st.rerun()
             else:
@@ -161,6 +171,8 @@ else:
         st.session_state['logged_in'] = False
         st.session_state['username'] = ""
         st.session_state['role'] = ""
+        # Clear query parameters on logout
+        st.query_params.clear()
         st.rerun()
 
     choice = st.session_state['menu_choice']
