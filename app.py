@@ -37,7 +37,7 @@ def init_db():
             right_pass INTEGER,
             left_fail INTEGER,
             right_fail INTEGER,
-            tested_pairs INTEGER,
+            tested_pairs REAL,
             pass_pairs REAL,
             total_fail INTEGER,
             logged_user TEXT,
@@ -306,11 +306,9 @@ else:
                 
                 if submit_test:
                     if order_no_sel and prod_code_sel:
-                        tested_pairs = max(l_pass + l_fail, r_pass + r_fail)
-                        full_pairs = min(l_pass, r_pass)
-                        rem_left = l_pass - full_pairs
-                        rem_right = r_pass - full_pairs
-                        pass_pairs_val = full_pairs + (0.5 if (rem_left > 0 or rem_right > 0) else 0.0)
+                        # නිවැරදි ගණනය කිරීම: තනි අත් (Single Hands) සඳහා ද දත්ත නිවැරදිව ඇතුළත් වීම
+                        tested_pairs = (max(l_pass + l_fail, r_pass + r_fail)) / 2.0
+                        pass_pairs_val = (l_pass + r_pass) / 2.0
                         total_fail = l_fail + r_fail
                         
                         cursor = conn.cursor()
@@ -319,7 +317,7 @@ else:
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (str(test_date), sel_test_month, order_no_sel, prod_code_sel, machine_no, l_pass, r_pass, l_fail, r_fail, tested_pairs, pass_pairs_val, total_fail, st.session_state['username'], remarks))
                         conn.commit()
-                        st.success(f"✅ Test successfully saved to Database! Tested Pairs: {tested_pairs}, Pass Pairs: {pass_pairs_val}")
+                        st.success(f"✅ Test successfully saved to Database! Tested Units (Pairs equiv): {tested_pairs}, Pass Units: {pass_pairs_val}")
                     else:
                         st.error("❌ කරුණාකර නිවැරදි Order No සහ Product Code එකක් තෝරන්න.")
 
@@ -370,7 +368,7 @@ else:
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Orders", len(orders_df))
         col2.metric("Target Qty", orders_df['target_qty'].astype(int).sum() if not orders_df.empty else 0)
-        col3.metric("Tested Pass Qty", int(tests_df['pass_pairs'].astype(float).sum()) if not tests_df.empty else 0)
+        col3.metric("Tested Pass Qty", round(tests_df['pass_pairs'].astype(float).sum(), 1) if not tests_df.empty else 0)
         col4.metric("Total Defective Fails", tests_df['total_fail'].astype(int).sum() if not tests_df.empty else 0)
         
         if not tests_df.empty:
@@ -418,11 +416,9 @@ else:
                     lf = int(t_row['left_fail'])
                     rf = int(t_row['right_fail'])
                     
-                    tested_pairs = max(lp + lf, rp + rf)
-                    full_pairs = min(lp, rp)
-                    rem_l = lp - full_pairs
-                    rem_r = rp - full_pairs
-                    pass_pairs = full_pairs + (0.5 if (rem_l > 0 or rem_r > 0) else 0.0)
+                    # තනි අත් සහ ජෝඩු එකතුව නිවැරදිව Pair ගණනට හැරවීම (උදා: Left 2 ක් නම් 2/2 = 1 pair එකක් ලෙස හෝ දශම ලෙස එකතු වීම)
+                    tested_pairs = (max(lp + lf, rp + rf)) / 2.0
+                    pass_pairs = (lp + rp) / 2.0
                     
                     if tested_pairs == 0:
                         continue
@@ -440,6 +436,7 @@ else:
             
             if summary_list:
                 summary_df = pd.DataFrame(summary_list)
+                summary_df['Tested Pairs'] = summary_df['Tested Pairs'].apply(lambda x: int(x) if x % 1 == 0 else round(x, 1))
                 summary_df['Pass Pairs'] = summary_df['Pass Pairs'].apply(lambda x: int(x) if x % 1 == 0 else round(x, 1))
                 summary_df['Remaining Qty to Test'] = summary_df['Remaining Qty to Test'].apply(lambda x: int(x) if x % 1 == 0 else round(x, 1))
                 
