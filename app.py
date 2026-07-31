@@ -306,17 +306,18 @@ else:
                 
                 if submit_test:
                     if order_no_sel and prod_code_sel:
-                        entry_l_tested = l_pass + l_fail
-                        entry_r_tested = r_pass + r_fail
-                        entry_tested_pairs = max(entry_l_tested, entry_r_tested) / 2.0
-                        entry_pass_pairs = min(l_pass, r_pass) + (abs(l_pass - r_pass) / 2.0 if l_pass != r_pass else 0)
+                        # Database එකේ එකතු කිරීමට අවශ්‍ය අගයන් ගණනය කිරීම
+                        total_l_tested = l_pass + l_fail
+                        total_r_tested = r_pass + r_fail
+                        tested_pairs = max(total_l_tested, total_r_tested)
+                        pass_pairs_val = min(l_pass, r_pass)
                         total_fail = l_fail + r_fail
                         
                         cursor = conn.cursor()
                         cursor.execute("""
                             INSERT INTO test_entries (date, month, order_no, product_code, machine_number, left_pass, right_pass, left_fail, right_fail, tested_pairs, pass_pairs, total_fail, logged_user, remarks)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (str(test_date), sel_test_month, order_no_sel, prod_code_sel, machine_no, l_pass, r_pass, l_fail, r_fail, float(entry_tested_pairs), float(entry_pass_pairs), int(total_fail), st.session_state['username'], remarks))
+                        """, (str(test_date), sel_test_month, order_no_sel, prod_code_sel, machine_no, l_pass, r_pass, l_fail, r_fail, float(tested_pairs), float(pass_pairs_val), int(total_fail), st.session_state['username'], remarks))
                         conn.commit()
                         st.success(f"✅ Test successfully saved to Database!")
                     else:
@@ -369,7 +370,7 @@ else:
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Orders", len(orders_df))
         col2.metric("Target Qty", orders_df['target_qty'].astype(int).sum() if not orders_df.empty else 0)
-        col3.metric("Tested Pass Qty", round(tests_df['pass_pairs'].astype(float).sum(), 1) if not tests_df.empty else 0)
+        col3.metric("Tested Pass Qty", int(tests_df['pass_pairs'].astype(float).sum()) if not tests_df.empty else 0)
         col4.metric("Total Defective Fails", tests_df['total_fail'].astype(int).sum() if not tests_df.empty else 0)
         
         if not tests_df.empty:
@@ -390,7 +391,7 @@ else:
             m_tests = tests_df[tests_df['month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
             # --- 1. Order Progress Table ---
-            st.subheader("🗓️ Order Progress (Cumulative)")
+            st.subheader("🗓️ Order Progress")
             summary_list = []
             
             if not m_tests.empty:
@@ -417,6 +418,7 @@ else:
                     tot_lf = int(t_row['left_fail'])
                     tot_rf = int(t_row['right_fail'])
                     
+                    # Order Progress සඳහා අවශ්‍ය නිවැරදි ගණනය කිරීම්:
                     tot_l_tested = tot_lp + tot_lf
                     tot_r_tested = tot_rp + tot_rf
                     tested_pairs = max(tot_l_tested, tot_r_tested)
@@ -464,6 +466,7 @@ else:
                 
                 daily_tests = m_tests[m_tests['date'] == selected_date]
                 
+                # Class-wise තනි අත් දශම (0.5) ලෙස පෙන්වීම සඳහා සැකසීම
                 daily_summary_list = []
                 for g_class, g_df in daily_tests.groupby('Glove Class'):
                     d_lp = g_df['left_pass'].sum()
@@ -471,19 +474,19 @@ else:
                     d_lf = g_df['left_fail'].sum()
                     d_rf = g_df['right_fail'].sum()
                     
-                    d_l_tested = d_lp + d_lf
-                    d_r_tested = d_rp + d_rf
-                    d_tested_pairs = max(d_l_tested, d_r_tested) / 2.0
+                    d_tested = max(d_lp + d_lf, d_rp + d_rf) / 2.0
+                    d_pass = min(d_lp, d_rp) + (abs(d_lp - d_rp) / 2.0 if d_lp != d_rp else 0) # තනි අත් සඳහා අර්ධ ජෝඩු සැකසීම
+                    # වඩාත් නිරවද්‍ය ලෙස Class-wise Pass/Fail Pairs දශම ලෙස පෙන්වීම:
                     d_pass_pairs = (d_lp + d_rp) / 2.0
                     d_fail_pairs = (d_lf + d_rf) / 2.0
-                    d_tested_total = d_tested_pairs
+                    d_tested_total = d_pass_pairs + d_fail_pairs
                     d_fail_pct = round((d_fail_pairs / d_tested_total * 100), 2) if d_tested_total > 0 else 0.0
                     
                     daily_summary_list.append({
                         'Glove Class': g_class,
-                        'Tested Pairs': d_tested_pairs,
                         'Pass Pairs': d_pass_pairs,
                         'Total Fail': d_fail_pairs,
+                        'Tested Total': d_tested_total,
                         'Fail %': d_fail_pct
                     })
                 
@@ -499,19 +502,16 @@ else:
                     m_lf = g_df['left_fail'].sum()
                     m_rf = g_df['right_fail'].sum()
                     
-                    m_l_tested = m_lp + m_lf
-                    m_r_tested = m_rp + m_rf
-                    m_tested_pairs = max(m_l_tested, m_r_tested) / 2.0
                     m_pass_pairs = (m_lp + m_rp) / 2.0
                     m_fail_pairs = (m_lf + m_rf) / 2.0
-                    m_tested_total = m_tested_pairs
+                    m_tested_total = m_pass_pairs + m_fail_pairs
                     m_fail_pct = round((m_fail_pairs / m_tested_total * 100), 2) if m_tested_total > 0 else 0.0
                     
                     monthly_summary_list.append({
                         'Glove Class': g_class,
-                        'Tested Pairs': m_tested_pairs,
                         'Pass Pairs': m_pass_pairs,
                         'Total Fail': m_fail_pairs,
+                        'Tested Total': m_tested_total,
                         'Fail %': m_fail_pct
                     })
                 
