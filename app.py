@@ -388,9 +388,9 @@ else:
             report_month = st.selectbox("Select Month for Report", all_months)
             
             m_orders = orders_df[orders_df['month'] == report_month] if not orders_df.empty else pd.DataFrame()
-            m_tests = tests_df[tests_df['month'] == report_month] if not tests_df.empty else pd.DataFrame()
+            m_tests = tests_df[tests_df['month'] == report_month] if not orders_df.empty else pd.DataFrame()
             
-            # --- 1. Order Progress Table (With Pairs & Single Hands) ---
+            # --- 1. Order Progress Table ---
             st.subheader("🗓️ Order Progress (Cumulative Pairs & Single Hands)")
             summary_list = []
             
@@ -455,7 +455,7 @@ else:
             else:
                 st.info("No active test orders found for this month.")
             
-            # --- 2. Class-wise Testing Summary (Restored to Original Simple Format) ---
+            # --- 2. Class-wise Testing Summary (Using 0.5 Pair Calculation for Individual Hands) ---
             st.subheader("🛡️ Class-wise Testing Summary (Daily & Total)")
             if not m_tests.empty:
                 m_tests['Glove Class'] = m_tests['product_code'].apply(get_glove_class)
@@ -465,30 +465,55 @@ else:
                 
                 daily_tests = m_tests[m_tests['date'] == selected_date]
                 
-                daily_class_summary = daily_tests.groupby('Glove Class').agg({
-                    'tested_pairs': 'sum',
-                    'pass_pairs': 'sum',
-                    'total_fail': 'sum'
-                }).reset_index()
+                daily_summary_list = []
+                for g_class, g_df in daily_tests.groupby('Glove Class'):
+                    sum_lp = g_df['left_pass'].sum()
+                    sum_rp = g_df['right_pass'].sum()
+                    sum_lf = g_df['left_fail'].sum()
+                    sum_rf = g_df['right_fail'].sum()
+                    
+                    # Each individual hand is 0.5 pairs
+                    d_tested_pairs = (sum_lp + sum_rp + sum_lf + sum_rf) / 2.0
+                    d_pass_pairs = (sum_lp + sum_rp) / 2.0
+                    d_total_fail = (sum_lf + sum_rf) / 2.0
+                    
+                    d_fail_pct = round((d_total_fail / d_tested_pairs * 100), 2) if d_tested_pairs > 0 else 0.0
+                    
+                    daily_summary_list.append({
+                        'Glove Class': g_class,
+                        'Tested Pairs': d_tested_pairs,
+                        'Pass Pairs': d_pass_pairs,
+                        'Total Fail': d_total_fail,
+                        'Fail %': d_fail_pct
+                    })
                 
-                daily_class_summary['Fail %'] = daily_class_summary.apply(
-                    lambda r: round((r['total_fail'] / (r['tested_pairs'] * 2 if r['tested_pairs'] > 0 else 1) * 100), 2), axis=1
-                )
-                
+                daily_class_summary = pd.DataFrame(daily_summary_list)
                 st.markdown(f"**📅 Date: {selected_date} - Class-wise Test Qty**")
                 st.dataframe(daily_class_summary, use_container_width=True)
                 
                 st.markdown("**📊 Monthly Total Class-wise Summary**")
-                monthly_class_summary = m_tests.groupby('Glove Class').agg({
-                    'tested_pairs': 'sum',
-                    'pass_pairs': 'sum',
-                    'total_fail': 'sum'
-                }).reset_index()
+                monthly_summary_list = []
+                for g_class, g_df in m_tests.groupby('Glove Class'):
+                    sum_lp = g_df['left_pass'].sum()
+                    sum_rp = g_df['right_pass'].sum()
+                    sum_lf = g_df['left_fail'].sum()
+                    sum_rf = g_df['right_fail'].sum()
+                    
+                    m_tested_pairs = (sum_lp + sum_rp + sum_lf + sum_rf) / 2.0
+                    m_pass_pairs = (sum_lp + sum_rp) / 2.0
+                    m_total_fail = (sum_lf + sum_rf) / 2.0
+                    
+                    m_fail_pct = round((m_total_fail / m_tested_pairs * 100), 2) if m_tested_pairs > 0 else 0.0
+                    
+                    monthly_summary_list.append({
+                        'Glove Class': g_class,
+                        'Tested Pairs': m_tested_pairs,
+                        'Pass Pairs': m_pass_pairs,
+                        'Total Fail': m_total_fail,
+                        'Fail %': m_fail_pct
+                    })
                 
-                monthly_class_summary['Fail %'] = monthly_class_summary.apply(
-                    lambda r: round((r['total_fail'] / (r['tested_pairs'] * 2 if r['tested_pairs'] > 0 else 1) * 100), 2), axis=1
-                )
-                
+                monthly_class_summary = pd.DataFrame(monthly_summary_list)
                 st.dataframe(monthly_class_summary, use_container_width=True)
             else:
                 st.info("No test records found for this month.")
