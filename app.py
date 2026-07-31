@@ -82,10 +82,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Session State for Login
+# Initialize Session State securely (Preventing unintended resets on minor reruns)
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
+if 'username' not in st.session_state:
     st.session_state['username'] = ""
+if 'role' not in st.session_state:
     st.session_state['role'] = ""
 
 # Helper Function for Glove Class
@@ -157,6 +159,8 @@ else:
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Logout", use_container_width=True):
         st.session_state['logged_in'] = False
+        st.session_state['username'] = ""
+        st.session_state['role'] = ""
         st.rerun()
 
     choice = st.session_state['menu_choice']
@@ -388,7 +392,7 @@ else:
             report_month = st.selectbox("Select Month for Report", all_months)
             
             m_orders = orders_df[orders_df['month'] == report_month] if not orders_df.empty else pd.DataFrame()
-            m_tests = tests_df[tests_df['month'] == report_month] if not orders_df.empty else pd.DataFrame()
+            m_tests = tests_df[tests_df['month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
             # --- 1. Order Progress Table ---
             st.subheader("🗓️ Order Progress (Cumulative Pairs & Single Hands)")
@@ -472,7 +476,7 @@ else:
                     sum_lf = g_df['left_fail'].sum()
                     sum_rf = g_df['right_fail'].sum()
                     
-                    # Each individual hand is 0.5 pairs
+                    # Each individual hand counts as 0.5 pairs
                     d_tested_pairs = (sum_lp + sum_rp + sum_lf + sum_rf) / 2.0
                     d_pass_pairs = (sum_lp + sum_rp) / 2.0
                     d_total_fail = (sum_lf + sum_rf) / 2.0
