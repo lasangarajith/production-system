@@ -306,18 +306,19 @@ else:
                 
                 if submit_test:
                     if order_no_sel and prod_code_sel:
-                        # Database එකේ එකතු කිරීමට අවශ්‍ය අගයන් ගණනය කිරීම
-                        total_l_tested = l_pass + l_fail
-                        total_r_tested = r_pass + r_fail
-                        tested_pairs = max(total_l_tested, total_r_tested)
-                        pass_pairs_val = min(l_pass, r_pass)
+                        # Automatically calculate tested pairs and remaining single hands based on Min/Max
+                        tot_l_tested = l_pass + l_fail
+                        tot_r_tested = r_pass + r_fail
+                        
+                        entry_tested_pairs = float(min(tot_l_tested, tot_r_tested))
+                        entry_pass_pairs = float(min(l_pass, r_pass)) if (l_pass > 0 and r_pass > 0) else float(l_pass + r_pass)
                         total_fail = l_fail + r_fail
                         
                         cursor = conn.cursor()
                         cursor.execute("""
                             INSERT INTO test_entries (date, month, order_no, product_code, machine_number, left_pass, right_pass, left_fail, right_fail, tested_pairs, pass_pairs, total_fail, logged_user, remarks)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (str(test_date), sel_test_month, order_no_sel, prod_code_sel, machine_no, l_pass, r_pass, l_fail, r_fail, float(tested_pairs), float(pass_pairs_val), int(total_fail), st.session_state['username'], remarks))
+                        """, (str(test_date), sel_test_month, order_no_sel, prod_code_sel, machine_no, l_pass, r_pass, l_fail, r_fail, entry_tested_pairs, entry_pass_pairs, int(total_fail), st.session_state['username'], remarks))
                         conn.commit()
                         st.success(f"✅ Test successfully saved to Database!")
                     else:
@@ -391,7 +392,7 @@ else:
             m_tests = tests_df[tests_df['month'] == report_month] if not tests_df.empty else pd.DataFrame()
             
             # --- 1. Order Progress Table ---
-            st.subheader("🗓️ Order Progress")
+            st.subheader("🗓️ Order Progress (Cumulative Pairs & Single Hands)")
             summary_list = []
             
             if not m_tests.empty:
@@ -418,18 +419,18 @@ else:
                     tot_lf = int(t_row['left_fail'])
                     tot_rf = int(t_row['right_fail'])
                     
-                    # Order Progress සඳහා අවශ්‍ය නිවැරදි ගණනය කිරීම්:
                     tot_l_tested = tot_lp + tot_lf
                     tot_r_tested = tot_rp + tot_rf
-                    tested_pairs = max(tot_l_tested, tot_r_tested)
-                    pass_pairs = min(tot_lp, tot_rp)
                     
-                    pass_left = tot_lp - pass_pairs
-                    pass_right = tot_rp - pass_pairs
-                    fail_left = tot_lf
-                    fail_right = tot_rf
+                    # Complete pairs vs Single remaining hands calculation
+                    tested_pairs = min(tot_l_tested, tot_r_tested)
+                    pass_pairs = min(tot_lp, tot_rp) if (tot_lp > 0 and tot_rp > 0) else 0
                     
-                    if tested_pairs == 0:
+                    # Remaining single hands that didn't form a pair
+                    single_left_remain = max(0, tot_l_tested - tested_pairs)
+                    single_right_remain = max(0, tot_r_tested - tested_pairs)
+                    
+                    if (tot_l_tested == 0) and (tot_r_tested == 0):
                         continue
                         
                     remaining_qty = max(0, target - pass_pairs) if target > 0 else 0
@@ -438,8 +439,9 @@ else:
                         'Order No': ord_no, 'Product Code': prod_code, 'Glove Class': get_glove_class(prod_code),
                         'Order Name': order_name, 'Target Qty': target, 
                         'Tested Pairs': tested_pairs, 'Pass Pairs': pass_pairs, 
-                        'Pass Left Hand': pass_left, 'Pass Right Hand': pass_right, 
-                        'Fail Left Hand': fail_left, 'Fail Right Hand': fail_right, 
+                        'Single Left Hand (Extra)': single_left_remain, 'Single Right Hand (Extra)': single_right_remain,
+                        'Pass Left Hand': tot_lp, 'Pass Right Hand': tot_rp, 
+                        'Fail Left Hand': tot_lf, 'Fail Right Hand': tot_rf, 
                         'Remaining Qty to Test': remaining_qty
                     })
             
@@ -466,7 +468,6 @@ else:
                 
                 daily_tests = m_tests[m_tests['date'] == selected_date]
                 
-                # Class-wise තනි අත් දශම (0.5) ලෙස පෙන්වීම සඳහා සැකසීම
                 daily_summary_list = []
                 for g_class, g_df in daily_tests.groupby('Glove Class'):
                     d_lp = g_df['left_pass'].sum()
@@ -474,19 +475,23 @@ else:
                     d_lf = g_df['left_fail'].sum()
                     d_rf = g_df['right_fail'].sum()
                     
-                    d_tested = max(d_lp + d_lf, d_rp + d_rf) / 2.0
-                    d_pass = min(d_lp, d_rp) + (abs(d_lp - d_rp) / 2.0 if d_lp != d_rp else 0) # තනි අත් සඳහා අර්ධ ජෝඩු සැකසීම
-                    # වඩාත් නිරවද්‍ය ලෙස Class-wise Pass/Fail Pairs දශම ලෙස පෙන්වීම:
-                    d_pass_pairs = (d_lp + d_rp) / 2.0
-                    d_fail_pairs = (d_lf + d_rf) / 2.0
-                    d_tested_total = d_pass_pairs + d_fail_pairs
-                    d_fail_pct = round((d_fail_pairs / d_tested_total * 100), 2) if d_tested_total > 0 else 0.0
+                    d_l_tested = d_lp + d_lf
+                    d_r_tested = d_rp + d_rf
+                    d_tested_pairs = min(d_l_tested, d_r_tested)
+                    d_single_left = max(0, d_l_tested - d_tested_pairs)
+                    d_single_right = max(0, d_r_tested - d_tested_pairs)
+                    
+                    d_pass_pairs = min(d_lp, d_rp) if (d_lp > 0 and d_rp > 0) else 0
+                    d_fail_pairs = d_lf + d_rf
+                    d_fail_pct = round((d_fail_pairs / (d_tested_pairs * 2 if d_tested_pairs > 0 else 1) * 100), 2)
                     
                     daily_summary_list.append({
                         'Glove Class': g_class,
+                        'Tested Pairs': d_tested_pairs,
+                        'Single Left (Extra)': d_single_left,
+                        'Single Right (Extra)': d_single_right,
                         'Pass Pairs': d_pass_pairs,
                         'Total Fail': d_fail_pairs,
-                        'Tested Total': d_tested_total,
                         'Fail %': d_fail_pct
                     })
                 
@@ -502,16 +507,23 @@ else:
                     m_lf = g_df['left_fail'].sum()
                     m_rf = g_df['right_fail'].sum()
                     
-                    m_pass_pairs = (m_lp + m_rp) / 2.0
-                    m_fail_pairs = (m_lf + m_rf) / 2.0
-                    m_tested_total = m_pass_pairs + m_fail_pairs
-                    m_fail_pct = round((m_fail_pairs / m_tested_total * 100), 2) if m_tested_total > 0 else 0.0
+                    m_l_tested = m_lp + m_lf
+                    m_r_tested = m_rp + m_rf
+                    m_tested_pairs = min(m_l_tested, m_r_tested)
+                    m_single_left = max(0, m_l_tested - m_tested_pairs)
+                    m_single_right = max(0, m_r_tested - m_tested_pairs)
+                    
+                    m_pass_pairs = min(m_lp, m_rp) if (m_lp > 0 and m_rp > 0) else 0
+                    m_fail_pairs = m_lf + m_rf
+                    m_fail_pct = round((m_fail_pairs / (m_tested_pairs * 2 if m_tested_pairs > 0 else 1) * 100), 2)
                     
                     monthly_summary_list.append({
                         'Glove Class': g_class,
+                        'Tested Pairs': m_tested_pairs,
+                        'Single Left (Extra)': m_single_left,
+                        'Single Right (Extra)': m_single_right,
                         'Pass Pairs': m_pass_pairs,
                         'Total Fail': m_fail_pairs,
-                        'Tested Total': m_tested_total,
                         'Fail %': m_fail_pct
                     })
                 
