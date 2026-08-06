@@ -2,14 +2,16 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import sqlite3
+import os
 import io
 
 # Page Configuration
 st.set_page_config(page_title="Electric Glove Proof Testing System", page_icon="⚡", layout="wide")
 
-# --- DATABASE SETUP (SQLite) ---
+# --- DATABASE SETUP (SQLite with absolute path to prevent data loss) ---
 def init_db():
-    conn = sqlite3.connect('glove_system.db', check_same_thread=False)
+    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'glove_system.db')
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     cursor = conn.cursor()
     
     # Orders Table
@@ -264,6 +266,7 @@ else:
     if st.sidebar.button("🧪 Glove Test Entry"): st.session_state['menu_choice'] = "Test Entry"
     if st.sidebar.button("🔍 Failed Analysis"): st.session_state['menu_choice'] = "Failed Analysis"
     if st.sidebar.button("📈 Reports & Progress"): st.session_state['menu_choice'] = "Reports"
+    if st.sidebar.button("📋 Monthly Shipment Report"): st.session_state['menu_choice'] = "Monthly Shipment Report"
     
     role = st.session_state['role']
     if role == "Admin":
@@ -397,8 +400,6 @@ else:
                     
                     if not month_orders.empty:
                         order_no_sel = st.selectbox("Select Order No", month_orders['order_no'].unique())
-                        
-                        # Order Sheet එකට (මාසයට) අදාළ සියලුම Product Codes ටික ගෙන, ටයිප් කරද්දී ෆිල්ටර් වන සේ සකසා ඇත
                         available_codes = month_orders['product_code'].unique().tolist()
                         prod_code_sel = st.selectbox("Select Product Code (Type to filter)", available_codes)
                     else:
@@ -523,7 +524,101 @@ else:
         except Exception as e:
             st.warning(f"Error processing product codes: {e}")
 
-    # --- 5. USER MANAGEMENT ---
+    # --- 5. MONTHLY SHIPMENT REPORT (NEW TAB) ---
+    elif choice == "Monthly Shipment Report":
+        st.header("📋 Monthly Shipment Report")
+        st.markdown("View summary and details of orders, pass quantities, and remaining quantities for a specific month and order name.")
+        
+        orders_df = load_orders_safe(conn)
+        tests_df = pd.read_sql("SELECT * FROM test_entries", conn)
+        
+        if not orders_df.empty:
+            # 1. Month and Year Selection
+            available_report_months = sorted(orders_df['month'].unique().tolist())
+            sel_rep_month = st.selectbox("Month and Year", available_report_months)
+            
+            month_orders_full = orders_df[orders_df['month'] == sel_rep_month]
+            
+            if not month_orders_full.empty:
+                # 2. Order Name Selection
+                available_order_names = sorted(month_orders_full['order_name'].unique().tolist())
+                sel_rep_order_name = st.selectbox("Order Name", available_order_names)
+                
+                # Filter orders matching selected month and order name
+                selected_orders = month_orders_full[month_orders_full['order_name'] == sel_rep_order_name]
+                
+                # Aggregate total targets for this order name
+                total_order_qty = int(selected_orders['target_qty'].astype(int).sum())
+                
+                # Calculate total passed pairs from test entries for these orders
+                total_pass_qty = 0
+                table_rows = []
+                
+                for _, ord_row in selected_orders.iterrows():
+                    o_no = ord_row['order_no']
+                    p_code = ord_row['product_code']
+                    o_target = int(ord_row['target_qty'])
+                    
+                    # Get passes for this order number and product code
+                    match_tests = pd.DataFrame()
+                    if not tests_df.empty:
+                        match_tests = tests_df[(tests_df['month'] == sel_rep_month) & 
+                                               (tests_df['order_no'].astype(str) == str(o_no)) & 
+                                               (tests_df['product_code'].astype(str).str.strip() == str(p_code).strip())]
+                    
+                    o_pass_qty = int(match_tests['pass_pairs'].astype(float).sum()) if not match_tests.empty else 0
+                    total_pass_qty += o_pass_qty
+                    o_remaining = max(0, o_target - o_pass_qty)
+                    
+                    table_rows.append({
+                        'Order number': o_no,
+                        'Product code': p_code,
+                        'Order Qty': o_target,
+                        'Pass Qty': o_pass_qty,
+                        'Remaining Qty': o_remaining
+                    })
+                
+                total_remaining_qty = max(0, total_order_qty - total_pass_qty)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # Display Summary Metrics boxes as sketched
+                m_col1, m_col2, m_col3 = st.columns(3)
+                with m_col1:
+                    st.metric("Order Qty", total_order_qty)
+                with m_col2:
+                    st.metric("Pass Qty", total_pass_qty)
+                with m_col3:
+                    st.metric("Remaining Qty", total_remaining_qty)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.subheader(f"Detailed Shipment Breakdown for: {sel_rep_order_name}")
+                
+                if table_rows:
+                    rep_table_df = pd.DataFrame(table_rows)
+                    st.dataframe(rep_table_df, use_container_width=True)
+                    
+                    # Export button for the shipment report
+                    try:
+                        output_rep = io.BytesIO()
+                        with pd.ExcelWriter(output_rep, engine='openpyxl') as writer:
+                            rep_table_df.to_excel(writer, index=False, sheet_name='Shipment_Report')
+                        st.download_button(
+                            label="📥 Download Shipment Report as Excel",
+                            data=output_rep.getvalue(),
+                            file_name=f"Shipment_Report_{sel_rep_month.replace(' ', '_')}_{sel_rep_order_name.replace(' ', '_')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    except Exception:
+                        pass
+                else:
+                    st.info("No detailed items found for this order name.")
+            else:
+                st.warning("No orders found for the selected month.")
+        else:
+            st.info("No orders available in the database to generate shipment reports.")
+
+    # --- 6. USER MANAGEMENT ---
     elif choice == "User Management" and role == "Admin":
         st.header("👥 Operator & User Management")
         with st.form("add_user_form"):
@@ -545,7 +640,7 @@ else:
         users_df = pd.read_sql("SELECT username as Username, role as Role FROM users", conn)
         st.dataframe(users_df, use_container_width=True)
 
-    # --- 6. DASHBOARD ---
+    # --- 7. DASHBOARD ---
     elif choice == "Dashboard":
         st.header("📊 Electric Glove Testing Dashboard")
         st.markdown("Overview of order quantities, pass quantities, and testing performance.")
@@ -610,7 +705,7 @@ else:
         else:
             st.info("No data available in the system yet.")
 
-    # --- 7. REPORTS & PROGRESS ---
+    # --- 8. REPORTS & PROGRESS ---
     elif choice == "Reports":
         st.header("📈 Monthly Reports & Class-wise Breakdown")
         st.markdown("Detailed order progression, daily/monthly class summaries, and export tools.")
